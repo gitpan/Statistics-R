@@ -1,13 +1,11 @@
 Changes
 lib/Statistics/R.pm
 lib/Statistics/R/Bridge.pm
-lib/Statistics/R/Bridge/Linux.pm
-lib/Statistics/R/Bridge/pipe.pm
-lib/Statistics/R/Bridge/Win32.pm
 Makefile.PL
 MANIFEST			This list of files
 README
 script/statistics-r.pl
 script/test-shared.pl
 t/basic.t
+t/pod.t
 META.yml                                 Module meta-data (added by MakeMaker)

@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Statistics-R
-version:            0.04
+version:            0.05
 abstract:           Controls the R (R-project) interpreter through Perl.
 author:
     - Graciliano M. P. <gm@virtuasites.com.br>
