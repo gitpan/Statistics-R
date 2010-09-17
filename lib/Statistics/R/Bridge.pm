@@ -5,7 +5,7 @@ use warnings;
 
 use IO::Select;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 our $HOLD_PIPE_X;
 
 my $this;
@@ -508,7 +508,7 @@ sub read_processR {
     return if !$r;
 
     my ( $n ) = ( $data =~ /(\d+)\s*$/gi );
-    $n = 1 if $n eq '';
+    $n = 1 unless $n;
 
     return ( $n, $data ) if wantarray;
     return $n;
@@ -797,6 +797,8 @@ sub Win32 {
 
 sub DESTROY {
     my $this = shift;
+
+    return unless $this->{ OS };
 
     $this->unlock;
     $this->stop if !$this->{ START_SHARED };
