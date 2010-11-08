@@ -9,19 +9,21 @@ DESCRIPTION
     have different Perl process accessing it.
 
 SYNOPSIS
-      use Statistics::R ;
+      use Statistics::R;
   
-      my $R = Statistics::R->new() ;
+      my $R = Statistics::R->new();
   
-      $R->startR ;
+      $R->startR;
   
-      $R->send(q`postscript("file.ps" , horizontal=FALSE , width=500 , height=500 , pointsize=1)`) ;
-      $R->send(q`plot(c(1, 5, 10), type = "l")`) ;
-  
-      $R->send(qq`x = 123 \n print(x)`) ;
-      my $ret = $R->read ;
-  
-      $R->stopR() ;
+      $R->send(q`postscript("file.ps" , horizontal=FALSE , width=500 , height=500 , pointsize=1)`);
+      $R->send(q`plot(c(1, 5, 10), type = "l")`);
+      $R->send(q`dev.off()`);
+      $R->send(qq`x = 123 \n print(x)`);
+
+      my $ret = $R->read;
+      print "\$ret : $ret\n";
+
+      $R->stopR();
 
 NEW
     When creating the R bridje object (Statistics::R), you can set some
@@ -119,13 +121,13 @@ EXECUTION FOR MULTIPLE PROCESS
 
     From your script you need to use the *start_sharedR()* option:
 
-      use Statistics::R ;
+      use Statistics::R;
   
-      my $R = Statistics::R->new() ;
+      my $R = Statistics::R->new();
   
-      $R->start_sharedR ;
+      $R->start_sharedR;
   
-      $R->send('x = 123') ;
+      $R->send('x = 123');
   
       exit;
 
