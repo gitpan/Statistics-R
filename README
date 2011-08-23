@@ -1,137 +1,143 @@
 NAME
-    Statistics::R - Controls the R (R-project) interpreter through Perl.
+    Statistics::R - Controls the R interpreter through Perl.
 
 DESCRIPTION
-    This will permit the control of the the R (R-project) interpreter
-    through Perl in different architectures and OS.
-
-    You can for example, start only one instance of the R interpreter and
-    have different Perl process accessing it.
+    This module controls the R interpreter (R project for statistical
+    computing: <http://www.r-project.org/>). Multiple architectures and OS
+    are supported and a single instance of R can be accessed by several Perl
+    processes.
 
 SYNOPSIS
       use Statistics::R;
   
+      # Create a communication bridge with R and start R
       my $R = Statistics::R->new();
   
-      $R->startR;
-  
-      $R->send(q`postscript("file.ps" , horizontal=FALSE , width=500 , height=500 , pointsize=1)`);
-      $R->send(q`plot(c(1, 5, 10), type = "l")`);
-      $R->send(q`dev.off()`);
-      $R->send(qq`x = 123 \n print(x)`);
+      # Run simple R commands
+      $R->run(q`postscript("file.ps" , horizontal=FALSE , width=500 , height=500 , pointsize=1)`);
+      $R->run(q`plot(c(1, 5, 10), type = "l")`);
+      $R->run(q`dev.off()`);
 
-      my $ret = $R->read;
-      print "\$ret : $ret\n";
+      # Pass and retrieve data
+      my $input_value = 1;
+      $R->set('x', $input_value);
+      $R->run(q`y <- x^2`);
+      my $output_value = $R->get('y');
+      print "y = $output_value\n";
 
-      $R->stopR();
-
-NEW
-    When creating the R bridje object (Statistics::R), you can set some
-    options:
-
-    log_dir
-        The directory where the bridge between R and Perl will be created.
-
-        R and Perl need to have read and write access to the directory!
-
-        *By dafault it will be created at *%TMP_DIR%/Statistics-R*.*
-
-    r_bin
-        The path to the R binary.
-
-        *By default the path will be searched in the default installation
-        path of R in the OS.*
-
-    r_dir
-        The directory of R.
-
-    tmp_dir
-        A temporary directory.
-
-        *By default the temporary directory of the OS will be
-        used/searched.*
+      $R->stop();
 
 METHODS
-    startR
-        Start R and the communication bridge.
+    new()
+        Create a Statistics::R bridge object between Perl and R and start()
+        R. Available options are:
 
-    start_sharedR
-        Start R or use an already running communication bridge.
+        shared
+            Start a shared bridge. See start().
 
-    stopR
-        Stop R and the bridge.
+        log_dir
+            The directory where the bridge between R and Perl will be
+            created.
 
-    restartR
+            R and Perl need to have read and write access to the directory
+            and Perl will change to this directory!
+
+            *By default it will be created at *%TMP_DIR%/Statistics-R*.*
+
+        r_bin
+            The path to the R binary.
+
+            *By default the path will be searched in the default
+            installation path of R in the OS.*
+
+        r_dir
+            The directory of R.
+
+        tmp_dir
+            A temporary directory.
+
+            *By default the temporary directory of the OS will be used*
+
+    start()
+        Start R and set the communication bridge between Perl and R. Pass
+        the option shared => 1 to use an already running bridge.
+
+    stop()
+        Stop R and stop the bridge.
+
+    restart()
         stop() and start() R.
 
-    Rbin
+    bin()
         Return the path to the R binary (executable).
 
-    send ($CMD)
+    send($CMD)
         Send some command to be executed inside R. Note that *$CMD* will be
         loaded by R with *source()*
 
-    read ($TIMEOUT)
-        Read the output of R for the last group of commands sent to R by
+    receive($TIMEOUT)
+        Get the output of R for the last group of commands sent to R by
         *send()*.
 
-    lock
+    lock()
         Lock the bridge for your PID.
 
-    unlock
+    unlock()
         Unlock the bridge if your PID have locked it.
 
-    is_blocked
-        Return *TRUE* if the bridge is blocked for your PID.
+    is_locked()
+        Return *TRUE* if the bridge is locked for your PID.
 
         In other words, returns *TRUE* if other process has *lock()ed* the
         bridge.
 
-    is_started
+    is_started()
         Return *TRUE* if the R interpreter is started, or still started.
 
-    clean_up
-        Clean up the enverioment, removing all the objects.
-
-    error
-        Return the last error message.
+    clean_up()
+        Clean up the environment, removing all the objects.
 
 INSTALL
-    To install this package you need to install R in your OS first, since
-    *Statistics::R* need to find R path to work fine.
+    To install this package you need to install R on your system first,
+    since *Statistics::R* need to find R path to work.
 
-    A standart installation of R on Win32 and Linux will work fine and
+    A standard installation of R on Win32 or Linux will work fine and be
     detected automatically by *Statistics::R*.
 
     Download page of R: <http://cran.r-project.org/banner.shtml>
 
     Or go to the R web site: <http://www.r-project.org/>
 
-EXECUTION FOR MULTIPLE PROCESS
-    The main pourpose of *Statistics::R* is to start a single R interpreter
-    that hear multiple Perl process.
+    You also need to have the following CPAN Perl modules installed:
+
+    Text::Balanced
+    Regexp::Common
+
+EXECUTION FOR MULTIPLE PROCESSES
+    The main purpose of *Statistics::R* is to start a single R interpreter
+    that listens to multiple Perl processes.
 
     Note that to do that R and Perl need to be running with the same
     user/group level.
 
-    To start the *Statistics::R* bridge you can use the script
+    To start the *Statistics::R* bridge, you can use the script
     *statistics-r.pl*:
 
       $> statistics-r.pl start
 
-    From your script you need to use the *start_sharedR()* option:
+    From your script you need to use the *start()* option in shared mode:
 
       use Statistics::R;
   
       my $R = Statistics::R->new();
   
-      $R->start_sharedR;
+      $R->start( shared => 1 );
   
       $R->send('x = 123');
   
       exit;
 
-    Note that in the example above the method *stopR()* wasn't called, sine
+    Note that in the example above the method *stop()* wasn't called, since
     it will close the bridge.
 
 SEE ALSO
@@ -145,10 +151,23 @@ SEE ALSO
 AUTHOR
     Graciliano M. P. <gm@virtuasites.com.br>
 
-MAINTAINER
+MAINTAINERS
     Brian Cassidy <bricas@cpan.org>
+
+    Florent Angly <florent.angly@gmail.com>
 
 COPYRIGHT & LICENSE
     This program is free software; you can redistribute it and/or modify it
     under the same terms as Perl itself.
+
+BUGS
+    All complex software has bugs lurking in it, and this program is no
+    exception. If you find a bug, please report it on the CPAN Tracker of
+    Statistics::R: <http://rt.cpan.org/Dist/Display.html?Name=Statistics-R>
+
+    Bug reports, suggestions and patches are welcome. The Statistics::R code
+    is developed on Github (<http://github.com/bricas/statistics-r>) and is
+    under Git revision control. To get the latest revision, run:
+
+       git clone git@github.com:bricas/statistics-r.git
 

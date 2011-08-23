@@ -1,7 +1,7 @@
 --- #YAML:1.0
 name:               Statistics-R
-version:            0.08
-abstract:           Controls the R (R-project) interpreter through Perl.
+version:            0.09
+abstract:           Controls the R interpreter through Perl.
 author:
     - Graciliano M. P. <gm@virtuasites.com.br>
 license:            perl
@@ -11,7 +11,9 @@ configure_requires:
 build_requires:
     ExtUtils::MakeMaker:  0
 requires:
-    Test::More:  0.47
+    Regexp::Common:  0
+    Test::More:      0.47
+    Text::Balanced:  0
 no_index:
     directory:
         - t

@@ -2,13 +2,14 @@ package Statistics::R::Bridge;
 
 use strict;
 use warnings;
-
 use IO::Select;
+use File::Spec::Functions;
 
-our $VERSION = '0.07';
+our $VERSION = '0.09';
 our $HOLD_PIPE_X;
 
 my $this;
+
 
 sub new {
     my $class = shift;
@@ -25,10 +26,11 @@ sub new {
     return $this;
 }
 
+
 sub pipe {
     my( $this, %args ) = @_;
 
-    $this->{ LOG_DIR } = $args{ log_dir } || "$this->{TMP_DIR}/Statistics-R";
+    $this->{ LOG_DIR } = $args{ log_dir } || catfile($this->{TMP_DIR}, 'Statistics-R');
 
     if ( !-e $this->{ LOG_DIR } ) { mkdir( $this->{ LOG_DIR }, 0777 ); }
 
@@ -36,48 +38,35 @@ sub pipe {
         || !-r $this->{ LOG_DIR }
         || !-w $this->{ LOG_DIR } )
     {
-        $this->error(
-            "Can't read or write to the directory (LOG_DIR) $this->{LOG_DIR}"
-        );
-        return undef;
+        die "Error: Could not read or write the LOG_DIR directory ".$this->{LOG_DIR}."\n"
     }
 
-    $this->{ OUTPUT_DIR } = $args{ output_dir } || "$this->{LOG_DIR}/output";
+    $this->{ OUTPUT_DIR } = $args{ output_dir } || catfile($this->{LOG_DIR}, 'output');
 
     if ( !-d $this->{ OUTPUT_DIR } || !-e $this->{ OUTPUT_DIR } ) {
         mkdir( $this->{ OUTPUT_DIR }, 0777 );
     }
 
     if ( !-r $this->{ OUTPUT_DIR } || !-w $this->{ OUTPUT_DIR } ) {
-        $this->error(
-            "Can't read or write to the directory (OUTPUT_DIR) $this->{OUTPUT_DIR}"
-        );
-        return undef;
+        die "Error: Could not read or write the OUTPUT_DIR directory ".$this->{OUTPUT_DIR}."\n"
     }
 
-    $this->{ START_R }    = "$this->{LOG_DIR}/start.r";
-    $this->{ OUTPUT_R }   = "$this->{LOG_DIR}/output.log";
-    $this->{ PROCESS_R }  = "$this->{LOG_DIR}/process.log";
-    $this->{ PID_R }      = "$this->{LOG_DIR}/R.pid";
-    $this->{ LOCK_R }     = "$this->{LOG_DIR}/lock.pid";
-    $this->{ STARTING_R } = "$this->{LOG_DIR}/R.starting";
-    $this->{ STOPING_R }  = "$this->{LOG_DIR}/R.stoping";
-
-    if ( $this->{ OS } eq 'win32' ) {
-        $this->{ START_R }    =~ s/\//\\/g;
-        $this->{ OUTPUT_R }   =~ s/\//\\/g;
-        $this->{ PROCESS_R }  =~ s/\//\\/g;
-        $this->{ PID_R }      =~ s/\//\\/g;
-        $this->{ LOCK_R }     =~ s/\//\\/g;
-        $this->{ STARTING_R } =~ s/\//\\/g;
-        $this->{ STOPING_R }  =~ s/\//\\/g;
-    }
+    $this->{ START_R }    = catfile($this->{LOG_DIR}, 'start.r');
+    $this->{ OUTPUT_R }   = catfile($this->{LOG_DIR}, 'output.log');
+    $this->{ PROCESS_R }  = catfile($this->{LOG_DIR}, 'process.log');
+    $this->{ PID_R }      = catfile($this->{LOG_DIR}, 'R.pid');
+    $this->{ LOCK_R }     = catfile($this->{LOG_DIR}, 'lock.pid');
+    $this->{ STARTING_R } = catfile($this->{LOG_DIR}, 'R.starting');
+    $this->{ STOPING_R }  = catfile($this->{LOG_DIR}, 'R.stoping');
 
 }
+
 
 sub bin {
-    shift->{ R_BIN };
+    my $this = shift;
+    $this->{ R_BIN };
 }
+
 
 sub send {
     my( $this, $cmd ) = @_;
@@ -86,16 +75,16 @@ sub send {
     $cmd .= "\n" if $cmd !~ /\n$/;
     $cmd =~ s/\n/\r\n/gs;
 
-    while ( $this->is_blocked ) { sleep( 1 ); }
+    while ( $this->is_locked ) { sleep( 1 ); }
 
     my $n = $this->read_processR || 0;
     $n = 1 if $n eq '0' || $n eq '';
 
-    my $file = "$this->{LOG_DIR}/input.$n.r";
+    my $file = catfile( $this->{LOG_DIR}, "input.$n.r" );
 
     while ( -e $file || -e "$file._" ) {
         ++$n;
-        $file = "$this->{LOG_DIR}/input.$n.r";
+        $file = catfile( $this->{LOG_DIR}, "input.$n.r" );
     }
 
     open( my $fh, ">$file._" );
@@ -138,7 +127,8 @@ sub send {
     return $status;
 }
 
-sub read {
+
+sub receive {
     my( $this, $timeout ) = @_;
 
     $timeout = -1 if !defined $timeout;
@@ -169,6 +159,8 @@ sub read {
     return @lines if wantarray;
     return join( "\n", @lines );
 }
+*read = \&receive;
+
 
 sub clean_log_dir {
     my $this = shift;
@@ -179,6 +171,7 @@ sub clean_log_dir {
         unlink $dir_i if $dir_i !~ /R\.(?:starting|stoping)$/;
     }
 }
+
 
 sub is_started {
     my( $this, $can_auto_start ) = @_;
@@ -212,10 +205,11 @@ sub is_started {
     return 1;
 }
 
+
 sub lock {
     my $this = shift;
 
-    while ( $this->is_blocked ) { select( undef, undef, undef, 0.5 ); }
+    while ( $this->is_locked ) { select( undef, undef, undef, 0.5 ); }
 
     open( my $fh, ">$this->{LOCK_R}" );
     print $fh "$$\n";
@@ -226,15 +220,17 @@ sub lock {
     $this->{ LOCK } = 1;
 }
 
+
 sub unlock {
     my $this = shift;
 
-    return if $this->is_blocked;
+    return if $this->is_locked;
     unlink( $this->{ LOCK_R } );
     return 1;
 }
 
-sub is_blocked {
+
+sub is_locked {
     my $this = shift;
 
     return undef
@@ -252,6 +248,8 @@ sub is_blocked {
     if ( !kill( 0, $pid ) ) { unlink( $this->{ LOCK_R } ); return undef; }
     return 1;
 }
+*is_blocked = \&is_locked;
+
 
 sub update_pid {
     my $this = shift;
@@ -263,6 +261,7 @@ sub update_pid {
     return $this->{ PID } if $pid eq '';
     $this->{ PID } = $pid;
 }
+
 
 sub chmod_all {
     my $this = shift;
@@ -277,6 +276,7 @@ sub chmod_all {
         $this->{ PID_R } );
 }
 
+
 sub start {
     my $this = shift;
 
@@ -290,18 +290,18 @@ sub start {
 
     my $fh;
 
-    open( $fh, ">$this->{PID_R}" );
-    close( $fh );
-    open( $fh, ">$this->{OUTPUT_R}" );
-    close( $fh );
-    open( $fh, ">$this->{PROCESS_R}" );
-    close( $fh );
+    open $fh, '>', $this->{PID_R};
+    close $fh;
+    open $fh, '>', $this->{OUTPUT_R};
+    close $fh;
+    open $fh, '>', $this->{PROCESS_R};
+    close $fh;
 
     $this->chmod_all;
 
-    my $cmd = "$this->{START_CMD} <start.r >output.log";
+    my $cmd = $this->{START_CMD}." <start.r >output.log";
 
-    chdir( "$this->{LOG_DIR}" );
+    chdir $this->{LOG_DIR};
     my $pid = open( my $read, "| $cmd" );
     return if !$pid;
 
@@ -358,6 +358,7 @@ sub wait_starting {
     return;
 }
 
+
 sub wait_stoping {
     my $this = shift;
 
@@ -370,12 +371,14 @@ sub wait_stoping {
     return 1;
 }
 
+
 sub sleep_unsync {
     my $this = shift;
 
     my $n = "0." . int( rand( 100 ) );
     select( undef, undef, undef, $n );
 }
+
 
 sub start_shared {
     my( $this, $no_recall ) = @_;
@@ -433,6 +436,7 @@ sub start_shared {
     return $stat;
 }
 
+
 sub stop {
     no warnings; # squash "Killed" warning for now
     my $this = shift;
@@ -486,12 +490,14 @@ sub stop {
     return 1;
 }
 
+
 sub restart {
     my $this = shift;
 
     $this->stop;
     $this->start;
 }
+
 
 sub read_processR {
     my $this = shift;
@@ -513,6 +519,7 @@ sub read_processR {
     return ( $n, $data ) if wantarray;
     return $n;
 }
+
 
 sub save_file_startR {
     my $this = shift;
@@ -604,6 +611,7 @@ sub save_file_startR {
     chmod( 0777, $this->{ START_R } );
 }
 
+
 sub find_file {
     my $this  = shift;
     my @files = ref $_[ 0 ] ? @{ shift() } : shift;
@@ -611,11 +619,12 @@ sub find_file {
 
     for my $path ( @paths ) {
         for my $file ( @files ) {
-            my $fn = "$path/$file";
+            my $fn = catfile( $path, $file);
             return $fn if -e $fn && -x $fn;
         }
     }
 }
+
 
 sub cat_dir {
     my $this = shift;
@@ -648,16 +657,12 @@ sub cat_dir {
     return ( @files );
 }
 
-sub error {
-    my $this = shift;
-    Statistics::R->error( @_ );
-}
 
 sub Linux {
     my( $this, %args ) = @_;
 
-    $this->{ R_BIN } = $args{ r_bin } || $args{ R_bin } || '';
-    $this->{ R_DIR } = $args{ r_dir } || $args{ R_dir } || '';
+    $this->{ R_BIN }   = $args{ r_bin }   || $args{ R_bin } || '';
+    $this->{ R_DIR }   = $args{ r_dir }   || $args{ R_dir } || '';
     $this->{ TMP_DIR } = $args{ tmp_dir } || '';
 
     if ( !-s $this->{ R_BIN } ) {
@@ -698,18 +703,16 @@ sub Linux {
     }
 
     if ( !-s $this->{ R_BIN } ) {
-        $this->error( "Can'find R binary!" );
-        return undef;
+        die "Error: Could not find the R binary!\n";
     }
     if ( !-d $this->{ R_DIR } ) {
-        $this->error( "Can'find R directory!" );
-        return undef;
+        die "Error: Could not find the R directory!\n";
     }
 
     $this->{ START_CMD } = "$this->{R_BIN} --slave --vanilla ";
 
     if ( !$args{ log_dir } ) {
-        $args{ log_dir } = "$this->{TMP_DIR}/Statistics-R";
+        $args{ log_dir } = catfile( $this->{TMP_DIR}, 'Statistics-R');
     }
 
     $this->{ OS } = 'linux';
@@ -717,11 +720,12 @@ sub Linux {
     $this->pipe( %args );
 }
 
+
 sub Win32 {
     my( $this, %args ) = @_;
 
-    $this->{ R_BIN } = $args{ r_bin } || $args{ R_bin } || '';
-    $this->{ R_DIR } = $args{ r_dir } || $args{ R_dir } || '';
+    $this->{ R_BIN }   = $args{ r_bin }   || $args{ R_bin } || '';
+    $this->{ R_DIR }   = $args{ r_dir }   || $args{ R_dir } || '';
     $this->{ TMP_DIR } = $args{ tmp_dir } || '';
 
     if ( !-s $this->{ R_BIN } ) {
@@ -765,12 +769,10 @@ sub Win32 {
     }
 
     if ( !-s $this->{ R_BIN } ) {
-        $this->error( "Can'find R binary!" );
-        return undef;
+        die "Error: Could not find the R binary!\n";
     }
     if ( !-d $this->{ R_DIR } ) {
-        $this->error( "Can'find R directory!" );
-        return undef;
+        die "Error: Could not find the R directory!\n";
     }
 
     $this->{ R_BIN }   =~ s/\//\\/g;
@@ -784,9 +786,9 @@ sub Win32 {
 
     if ( !$args{ log_dir } ) {
 
-# $args{log_dir} = "$this->{R_DIR}/Statistics-R" ;
-# Bug Fix by CTB:  Reponse to RT Bug #17956: Win32: log_dir is not in tmp_dir by default as advertised
-        $args{ log_dir } = "$this->{TMP_DIR}/Statistics-R";
+        # $args{log_dir} = "$this->{R_DIR}/Statistics-R" ;
+        # Bug Fix by CTB:  Reponse to RT Bug #17956: Win32: log_dir is not in tmp_dir by default as advertised
+        $args{ log_dir } = catfile( $this->{TMP_DIR}, 'Statistics-R');
         $args{ log_dir } =~ s/\\+/\//gs;
     }
 
@@ -794,6 +796,7 @@ sub Win32 {
 
     $this->pipe( %args );
 }
+
 
 sub DESTROY {
     my $this = shift;
@@ -804,76 +807,21 @@ sub DESTROY {
     $this->stop if !$this->{ START_SHARED };
 }
 
+
 1;
 
 __END__
 
 =head1 NAME
 
-Statistics::R::Bridge - Implements a communication bridge between Perl and R (R-project).
+Statistics::R::Bridge - Implements a communication bridge between Perl and R.
 
 =head1 DESCRIPTION
 
-This will implements a communication bridge between Perl and R (R-project) in different architectures and OS.
-
-=head1 USAGE
+This will implements a communication bridge between Perl and R (R project for
+statistical computing: L<http://www.r-project.org/>) in different architectures
+and OS.
 
 B<You shouldn't use this directly. See L<Statistics::R> for usage.>
 
-=head1 METHODS
-
-=over 4
-
-=item start
-
-Start R and the bridge.
-
-=item stop
-
-Stop R and the bridge.
-
-=item restart
-
-stop() and start() R.
-
-=item bin
-
-Return the path to the R binary (executable).
-
-=item send ($CMD)
-
-Send some command to be executed inside R. Note that I<$CMD> will be loaded by R with I<source()>
-
-=item read ($TIMEOUT)
-
-Read the output of R for the last group of commands sent to R by I<send()>.
-
-=item error
-
-Return the last error message.
-
-=back
-
-=head1 SEE ALSO
-
-=over 4 
-
-=item * L<Statistics::R>
-
-=back 
-
-=head1 AUTHOR
-
-Graciliano M. P. E<lt>gm@virtuasites.com.brE<gt>
-
-=head1 MAINTAINER
-
-Brian Cassidy E<lt>bricas@cpan.orgE<gt>
-
-=head1 COPYRIGHT & LICENSE
-
-This program is free software; you can redistribute it and/or
-modify it under the same terms as Perl itself.
-
 =cut
-

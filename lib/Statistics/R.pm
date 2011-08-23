@@ -2,103 +2,247 @@ package Statistics::R;
 
 use strict;
 use warnings;
-
+use Regexp::Common;
+use Text::Balanced qw ( extract_delimited extract_multiple );
 use Statistics::R::Bridge;
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
-my( $this, @ERROR );
+my $this;
+
 
 sub new {
-    my $class = shift;
+    my ($class, @args) = @_;
 
     if( !defined $this ) {
         $this  = bless( {}, $class );
-        $this->R( @_ );
-
-        return unless $this->{ BRIDGE };
+        # Create bridge
+        $this->{ BRIDGE } = Statistics::R::Bridge->new( @args );
+        $this->start( @args );
     }
 
     return $this;
 }
 
-sub R {
-    my $this = shift;
-    $this->{ BRIDGE } = Statistics::R::Bridge->new( @_ );
+
+sub run {
+    # Send a command to R, receive its output and return it, or die if there was
+    # an error
+    my ($this, $cmd) = @_;
+    # Send command
+    $this->send($cmd);
+    # Receive command output
+    my $output = $this->receive();
+    # Check for errors
+    if ($output =~ m/^<.*>$/) {
+        my $msg = "Error running the R command\n".
+                  "   $cmd\n".
+                  "Reason\n".
+                  "   $output\n";
+        die $msg;
+    }
+    return $output;
 }
 
-sub error {
-    my $this = shift;
 
-    if( @_ ) {
-        my $e = shift;
-        push @ERROR, $e;
-        warn $e;
+sub set {
+    # Assign a variable or array of variables in R. Use undef if you want to
+    # assign NULL to an R variable
+    my ($this, $varname, $arr) = @_;
+    
+    # Check variable type, convert everything into an arrayref
+    my $ref = ref $arr;
+    if ($ref eq '') {
+        # This is a scalar
+        $arr = [ $arr ];
+    } elsif ($ref eq 'ARRAY') {
+        # This is an array reference, nothing to do
+    } else {
+        die "Error: Import variable of type $ref is not supported\n";
     }
 
-    splice( @ERROR, 0, ( $#ERROR - 10 ) ) if @ERROR > 10;
+    # Quote strings and nullify undef variables
+    for (my $i = 0; $i < scalar @$arr; $i++) {
+        if (defined $$arr[$i]) {
+            if ( $$arr[$i] !~ /$RE{num}{real}/ ) {
+                $$arr[$i] = '"'.$$arr[$i].'"';
+            }
+        } else {
+            $$arr[$i] = 'NULL';
+        }
+    }
 
-    return @ERROR if wantarray;
-    return $ERROR[ -1 ];
+    # Build a string and run it to import data
+    my $cmd = $varname.' <- c('.join(', ',@$arr).')';
+    $this->run($cmd);
+    return 1;
 }
 
-sub startR {
+
+sub get {
+    # Get the value of an R variable
+    my ($this, $varname) = @_;
+    my $string = $this->run(qq`print($varname)`);
+
+    # Parse R output
+    my $value;
+    if ($string eq 'NULL') {
+        $value = undef;
+    } elsif ($string =~ m/^\s*\[\d+\]/) {
+        # Vector: its string look like:
+        # ' [1]  6.4 13.3  4.1  1.3 14.1 10.6  9.9  9.6 15.3
+        #  [16]  5.2 10.9 14.4'
+        my @lines = split /\n/, $string;
+        for (my $i = 0; $i < scalar @lines; $i++) {
+            $lines[$i] =~ s/^\s*\[\d+\] //;
+        }
+        $value = join ' ', @lines;
+    } else {
+        my @lines = split /\n/, $string;
+        if (scalar @lines == 2) {
+            # String looks like: '    mean 
+            # 10.41111 '
+            # Extract value from second line
+            $value = $lines[1];
+            $value =~ s/^\s*(\S+)\s*$/$1/;
+        } else {
+            die "Error: Don't know how to handle this R output\n$string\n";
+        }
+    }
+
+    # Clean
+    my @arr;
+    if (not defined $value) {
+        @arr = ( undef );
+    } else {
+        # Split string into an array, paying attention to strings containing spaces
+        @arr = extract_multiple( $value, [sub { extract_delimited($_[0],q{ '"}) },] );
+        for (my $i = 0; $i < scalar @arr; $i++) {
+            my $elem = $arr[$i];
+            if ($elem =~ m/^\s*$/) {
+                # Remove elements that are simply whitespaces
+                splice @arr, $i, 1;
+                $i--;
+            } else {
+                # Trim whitespaces
+                $arr[$i] =~ s/^\s*(.*?)\s*$/$1/;
+                # Remove double-quotes
+                $arr[$i] =~ s/^"(.*)"$/$1/; 
+            }
+        }
+
+    }
+
+    # Return either a scalar of an arrayref
+    my $ret_val;
+    if (scalar @arr == 1) {
+        $ret_val = $arr[0];
+    } else {
+        $ret_val = \@arr;
+    }
+
+    return $ret_val;
+}
+
+
+sub start {
+    my ($this, %args) = @_;
+    # Start R if it was not already started
+    my $status;
+    if (not $this->is_started) {
+        if ( (exists $args{ shared }) && ($args{ shared } == 1) ) {
+            # Start R in shared mode
+            $status = $this->{ BRIDGE }->start_shared;
+        } else {
+            # Start R in regular mode
+            delete $this->{ BRIDGE }->{ START_SHARED };
+            $status = $this->{ BRIDGE }->start;
+        }
+    } else {
+        $status = 1;
+    }
+}
+*startR = \&start;
+
+
+sub start_shared {
     my $this = shift;
-    delete $this->{ BRIDGE }->{ START_SHARED };
-    $this->{ BRIDGE }->start;
+    $this->start( shared => 1 );
 }
+*start_sharedR = \&start_shared;
 
-sub start_sharedR {
-    shift->{ BRIDGE }->start_shared;
-}
 
-sub stopR {
+sub stop {
     my $this = shift;
     delete $this->{ BRIDGE }->{ START_SHARED };
     $this->{ BRIDGE }->stop;
 }
+*stopR = \&stop;
 
-sub restartR {
-    shift->{ BRIDGE }->restart;
-}
 
-sub Rbin {
-    shift->{ BRIDGE }->bin;
+sub restart {
+    my $this = shift;
+    $this->{ BRIDGE }->restart;
 }
+*restartR = \&restart;
+
+
+sub bin {
+    my $this = shift;
+    $this->{ BRIDGE }->bin;
+}
+*Rbin = \&bin;
+
 
 sub lock {
     my $this = shift;
     $this->{ BRIDGE }->lock( @_ );
 }
 
+
 sub unlock {
     my $this = shift;
-    shift->{ BRIDGE }->unlock( @_ );
+    $this->{ BRIDGE }->unlock( @_ );
 }
 
-sub is_blocked {
+
+sub is_locked {
     my $this = shift;
-    $this->{ BRIDGE }->is_blocked( @_ );
+    $this->{ BRIDGE }->is_locked( @_ );
 }
+*is_blocked = \&is_locked;
+
 
 sub is_started {
     my $this = shift;
     $this->{ BRIDGE }->is_started;
 }
 
+
 sub send {
     my $this = shift;
     $this->{ BRIDGE }->send( @_ );
 }
 
-sub read {
+
+sub receive {
     my $this = shift;
     $this->{ BRIDGE }->read( @_ );
 }
+*read = \&receive;
+
 
 sub clean_up {
-    shift->send( 'rm(list = ls(all = TRUE))' );
+    my $this = shift;
+    $this->send( 'rm(list = ls(all = TRUE))' );
 }
+
+
+sub error {
+    # For backward compatibility
+    return '';
+}
+
 
 1;
 
@@ -106,45 +250,59 @@ __END__
 
 =head1 NAME
 
-Statistics::R - Controls the R (R-project) interpreter through Perl.
+Statistics::R - Controls the R interpreter through Perl.
 
 =head1 DESCRIPTION
 
-This will permit the control of the the R (R-project) interpreter through Perl in different architectures and OS.
-
-You can for example, start only one instance of the R interpreter and have different Perl process accessing it.
+This module controls the R interpreter (R project for statistical computing:
+L<http://www.r-project.org/>). Multiple architectures and OS are supported and 
+a single instance of R can be accessed by several Perl processes.
 
 =head1 SYNOPSIS
 
   use Statistics::R;
   
+  # Create a communication bridge with R and start R
   my $R = Statistics::R->new();
   
-  $R->startR;
-  
-  $R->send(q`postscript("file.ps" , horizontal=FALSE , width=500 , height=500 , pointsize=1)`);
-  $R->send(q`plot(c(1, 5, 10), type = "l")`);
-  $R->send(q`dev.off()`);
-  $R->send(qq`x = 123 \n print(x)`);
+  # Run simple R commands
+  $R->run(q`postscript("file.ps" , horizontal=FALSE , width=500 , height=500 , pointsize=1)`);
+  $R->run(q`plot(c(1, 5, 10), type = "l")`);
+  $R->run(q`dev.off()`);
 
-  my $ret = $R->read;
-  print "\$ret : $ret\n";
+  # Pass and retrieve data
+  my $input_value = 1;
+  $R->set('x', $input_value);
+  $R->run(q`y <- x^2`);
+  my $output_value = $R->get('y');
+  print "y = $output_value\n";
 
-  $R->stopR();
+  $R->stop();
 
-=head1 NEW
-
-When creating the R bridje object (Statistics::R), you can set some options:
+=head1 METHODS
 
 =over 4
+
+=item new()
+
+Create a Statistics::R bridge object between Perl and R and start() R. Available
+options are:
+
+
+=over 4
+
+=item shared
+
+Start a shared bridge. See start().
 
 =item log_dir
 
 The directory where the bridge between R and Perl will be created.
 
-B<R and Perl need to have read and write access to the directory!>
+B<R and Perl need to have read and write access to the directory and Perl will
+ change to this directory!>
 
-I<By dafault it will be created at I<%TMP_DIR%/Statistics-R>.>
+I<By default it will be created at I<%TMP_DIR%/Statistics-R>.>
 
 =item r_bin
 
@@ -160,75 +318,65 @@ The directory of R.
 
 A temporary directory.
 
-I<By default the temporary directory of the OS will be used/searched.>
+I<By default the temporary directory of the OS will be used>
 
 =back
 
-=head1 METHODS
 
-=over 4
+=item start()
 
-=item startR
+Start R and set the communication bridge between Perl and R. Pass the option
+shared => 1 to use an already running bridge.
 
-Start R and the communication bridge.
+=item stop()
 
-=item start_sharedR
+Stop R and stop the bridge.
 
-Start R or use an already running communication bridge.
-
-=item stopR
-
-Stop R and the bridge.
-
-=item restartR
+=item restart()
 
 stop() and start() R.
 
-=item Rbin
+=item bin()
 
 Return the path to the R binary (executable).
 
-=item send ($CMD)
+=item send($CMD)
 
 Send some command to be executed inside R. Note that I<$CMD> will be loaded by R with I<source()>
 
-=item read ($TIMEOUT)
+=item receive($TIMEOUT)
 
-Read the output of R for the last group of commands sent to R by I<send()>.
+Get the output of R for the last group of commands sent to R by I<send()>.
 
-=item lock
+=item lock()
 
 Lock the bridge for your PID.
 
-=item unlock
+=item unlock()
 
 Unlock the bridge if your PID have locked it.
 
-=item is_blocked
+=item is_locked()
 
-Return I<TRUE> if the bridge is blocked for your PID.
+Return I<TRUE> if the bridge is locked for your PID.
 
 In other words, returns I<TRUE> if other process has I<lock()ed> the bridge.
 
-=item is_started
+=item is_started()
 
 Return I<TRUE> if the R interpreter is started, or still started.
 
-=item clean_up
+=item clean_up()
 
-Clean up the enverioment, removing all the objects.
-
-=item error
-
-Return the last error message.
+Clean up the environment, removing all the objects.
 
 =back
 
 =head1 INSTALL
 
-To install this package you need to install R in your OS first, since I<Statistics::R> need to find R path to work fine.
+To install this package you need to install R on your system first, since I<Statistics::R> need to find R path to work.
 
-A standart installation of R on Win32 and Linux will work fine and detected automatically by I<Statistics::R>.
+A standard installation of R on Win32 or Linux will work fine and be detected automatically by I<Statistics::R>.
 
 Download page of R:
 L<http://cran.r-project.org/banner.shtml>
@@ -236,30 +384,41 @@ L<http://cran.r-project.org/banner.shtml>
 Or go to the R web site:
 L<http://www.r-project.org/>
 
-=head1 EXECUTION FOR MULTIPLE PROCESS
+You also need to have the following CPAN Perl modules installed:
 
-The main pourpose of I<Statistics::R> is to start a single R interpreter that hear
-multiple Perl process.
+=over 4
+
+=item Text::Balanced
+
+=item Regexp::Common
+
+=back
+
+=head1 EXECUTION FOR MULTIPLE PROCESSES
+
+The main purpose of I<Statistics::R> is to start a single R interpreter that
+listens to multiple Perl processes.
 
 Note that to do that R and Perl need to be running with the same user/group level.
 
-To start the I<Statistics::R> bridge you can use the script I<statistics-r.pl>:
+To start the I<Statistics::R> bridge, you can use the script I<statistics-r.pl>:
 
   $> statistics-r.pl start
 
-From your script you need to use the I<start_sharedR()> option:
+From your script you need to use the I<start()> option in shared mode:
 
   use Statistics::R;
   
   my $R = Statistics::R->new();
   
-  $R->start_sharedR;
+  $R->start( shared => 1 );
   
   $R->send('x = 123');
   
   exit;
 
-Note that in the example above the method I<stopR()> wasn't called, sine it will close the bridge.
+Note that in the example above the method I<stop()> wasn't called, since it will
+close the bridge.
 
 =head1 SEE ALSO
 
@@ -277,14 +436,27 @@ Note that in the example above the method I<stopR()> wasn't called, sine it will
 
 Graciliano M. P. E<lt>gm@virtuasites.com.brE<gt>
 
-=head1 MAINTAINER
+=head1 MAINTAINERS
 
 Brian Cassidy E<lt>bricas@cpan.orgE<gt>
+
+Florent Angly E<lt>florent.angly@gmail.comE<gt>
 
 =head1 COPYRIGHT & LICENSE
 
 This program is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
 
-=cut
+=head1 BUGS
 
+All complex software has bugs lurking in it, and this program is no exception.
+If you find a bug, please report it on the CPAN Tracker of Statistics::R:
+L<http://rt.cpan.org/Dist/Display.html?Name=Statistics-R>
+
+Bug reports, suggestions and patches are welcome. The Statistics::R code is
+developed on Github (L<http://github.com/bricas/statistics-r>) and is under Git
+revision control. To get the latest revision, run:
+
+   git clone git@github.com:bricas/statistics-r.git
+
+=cut

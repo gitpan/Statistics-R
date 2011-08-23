@@ -2,15 +2,15 @@
 
 use Statistics::R;
 
-my $R = Statistics::R->new();
+print "Starting R...";
 
-print "STARTING...";
+my $R = Statistics::R->new( shared => 1 );
 
-if ( $R->start_sharedR ) {
+if ( $R->is_started ) {
     print " OK\n";
 }
 else {
-    die( "Can't start R" );
+    die "Error: Could not start R\n";
 }
 
 $R->lock;
@@ -25,5 +25,5 @@ for ( 0 .. 10 ) {
 
 $R->unlock;
 
-print "by!\n";
+print "Bye!\n";
 
