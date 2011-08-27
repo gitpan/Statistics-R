@@ -1,0 +1,37 @@
+Done:
+have synopsis and tests work in windows
+replaced select undef, undef, undef, 0.1 by sleep(0.1)
+removed useless r_dir and tmp_dir options
+using File::Spec to obtain temp dir instead of platform-dependent crap code
+location of R detected by File::Which instead of plarform-dependent crap code
+chdir fix (RT bug #6724). Also fixes missing file in synopsis (RT #70307)
+read_file(), write_file(), touch_file()
+more subtle cleanup procedure (Bug #70392)
+
+
+
+TODO:
+
+
+* use module::install and require R so that tests cannot be started without a
+  proper R installation
+
+* Fix dev.null error
+
+* Add myself as author, e.g. Florent Angly (2011 interface cleanup, convenience functions, initialization refactoring, bug fixes)
+
+
+
+
+
+
+* Test r_bin option of new()
+* I die if R not found, but I still get unrelated warnings?
+* filehandles to write to scalars instead of files...
+* maybe not possible, but is it possible for R to read from stdin instead of source'ing a file?
+* chmod and chmod_all are ugly!
+* silence "used only once" warnings due to my function aliases
+* FAIL: keep track of last file written instead of scanning dir everytime...
+* FAIL: also remove log_dir if it had to be created, i.e. did not exist before
+* NO NEED, SEEMS TO WORK: may have to alias glob: on win, call win32_glob that requires dosglob and does string escapes
+

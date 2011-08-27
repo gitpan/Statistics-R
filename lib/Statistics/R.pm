@@ -1,25 +1,26 @@
 package Statistics::R;
 
+use 5.006;
 use strict;
 use warnings;
 use Regexp::Common;
 use Text::Balanced qw ( extract_delimited extract_multiple );
 use Statistics::R::Bridge;
 
-our $VERSION = '0.09';
-
-my $this;
+our $VERSION = '0.10';
 
 
 sub new {
     my ($class, @args) = @_;
 
-    if( !defined $this ) {
-        $this  = bless( {}, $class );
-        # Create bridge
-        $this->{ BRIDGE } = Statistics::R::Bridge->new( @args );
-        $this->start( @args );
-    }
+    my $this = {};
+    bless $this, ref($class) || $class;
+
+    # Create bridge
+    $this->{ BRIDGE } = Statistics::R::Bridge->new( @args );
+    
+    # Start R
+    $this->start( @args );
 
     return $this;
 }
@@ -234,7 +235,7 @@ sub receive {
 
 sub clean_up {
     my $this = shift;
-    $this->send( 'rm(list = ls(all = TRUE))' );
+    $this->{ BRIDGE }->clean_log_dir( @_ );
 }
 
 
@@ -250,7 +251,7 @@ __END__
 
 =head1 NAME
 
-Statistics::R - Controls the R interpreter through Perl.
+Statistics::R - Perl interface to control the R statistical program
 
 =head1 DESCRIPTION
 
@@ -297,31 +298,40 @@ Start a shared bridge. See start().
 
 =item log_dir
 
-The directory where the bridge between R and Perl will be created.
+A directory where temporary files necessary for the bridge between R and Perl
+will be stored.
 
-B<R and Perl need to have read and write access to the directory and Perl will
- change to this directory!>
+B<R and Perl need to have read and write access to the directory!>
 
-I<By default it will be created at I<%TMP_DIR%/Statistics-R>.>
+I<By default this will be a folder called Statistics-R and placed in a temporary
+directory of the system>
 
 =item r_bin
 
-The path to the R binary.
-
-I<By default the path will be searched in the default installation path of R in the OS.>
-
-=item r_dir
-
-The directory of R.
-
-=item tmp_dir
-
-A temporary directory.
-
-I<By default the temporary directory of the OS will be used>
+The path to the R binary. See I<INSTALLATION>.
 
 =back
 
+=item set()
+
+Set the value of an R variable, e.g.
+
+  $R->set( 'x', "apple" );
+
+or 
+
+  $R->set( 'y', [1, 2, 3] );
+
+
+=item get( $)
+ 
+Get the value of an R variable, e.g.
+
+  my $x = $R->get( 'x' );  # $y is an scalar
+
+or
+
+  my $y = $R->get( 'y' );  # $x is an arrayref
 
 =item start()
 
@@ -342,11 +352,13 @@ Return the path to the R binary (executable).
 
 =item send($CMD)
 
-Send some command to be executed inside R. Note that I<$CMD> will be loaded by R with I<source()>
+Send some command to be executed inside R. Note that I<$CMD> will be loaded by R
+with I<source()>. Prefer the run() command.
 
 =item receive($TIMEOUT)
 
 Get the output of R for the last group of commands sent to R by I<send()>.
+Prefer the run() command.
 
 =item lock()
 
@@ -372,11 +384,18 @@ Clean up the environment, removing all the objects.
 
 =back
 
-=head1 INSTALL
+=head1 INSTALLATION
 
-To install this package you need to install R on your system first, since I<Statistics::R> need to find R path to work.
+To install this package you need to install R on your system first, since
+I<Statistics::R> need to find R path to work. If R is in your PATH environment
+variable, then it should be available from a terminal and be detected
+automatically by I<Statistics::R>. This means that you do not have to do anything
+on Linux systems to get I<Statistics::R> working. On Windows systems, in addition
+to the folders described in PATH, the usual suspects will be checked for the
+presence of the R binary, e.g. C:\Program Files\R. Your last recourse if
+I<Statistics::R> does not find R is to specify its full path when calling new():
 
-A standard installation of R on Win32 or Linux will work fine and be detected automatically by I<Statistics::R>.
+    my $R = Statistics::R->new( r_bin => $fullpath );
 
 Download page of R:
 L<http://cran.r-project.org/banner.shtml>
@@ -391,6 +410,8 @@ You also need to have the following CPAN Perl modules installed:
 =item Text::Balanced
 
 =item Regexp::Common
+
+=item File::Which
 
 =back
 
@@ -413,7 +434,7 @@ From your script you need to use the I<start()> option in shared mode:
   
   $R->start( shared => 1 );
   
-  $R->send('x = 123');
+  $R->run('x = 123');
   
   exit;
 

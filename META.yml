@@ -1,24 +1,31 @@
---- #YAML:1.0
-name:               Statistics-R
-version:            0.09
-abstract:           Controls the R interpreter through Perl.
+---
+abstract: 'Perl interface to control the R statistical program'
 author:
-    - Graciliano M. P. <gm@virtuasites.com.br>
-license:            perl
-distribution_type:  module
-configure_requires:
-    ExtUtils::MakeMaker:  0
+  - 'Graciliano M. P. <gm@virtuasites.com.br>'
 build_requires:
-    ExtUtils::MakeMaker:  0
-requires:
-    Regexp::Common:  0
-    Test::More:      0.47
-    Text::Balanced:  0
-no_index:
-    directory:
-        - t
-        - inc
-generated_by:       ExtUtils::MakeMaker version 6.56
+  ExtUtils::MakeMaker: 6.42
+  Test::More: 0.47
+configure_requires:
+  ExtUtils::MakeMaker: 6.42
+distribution_type: module
+generated_by: 'Module::Install version 1.01'
+license: perl
 meta-spec:
-    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
-    version:  1.4
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: Statistics-R
+no_index:
+  directory:
+    - inc
+    - t
+requires:
+  File::Which: 0
+  Regexp::Common: 0
+  Text::Balanced: 0
+  perl: 5.6.0
+resources:
+  bugtracker: http://rt.cpan.org/Dist/Display.html?Name=Statistics-R
+  homepage: http://search.cpan.org/search?query=statistics%3A%3AR&mode=dist
+  license: http://dev.perl.org/licenses/
+  repository: git@github.com:bricas/statistics-r.git
+version: 0.10

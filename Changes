@@ -1,6 +1,13 @@
 Revision history for Perl extension Statistics::R.
 
-0.09 
+0.10  2011-08-27  
+    - Refactoring to remove old code doing platform-specific operations
+    - Lots of code cleanup
+    - Removed the now useless r_dir and tmp_dir options of new()
+    - Fix for change of dir bug (RT #6724). Also fixes missing synopsis file (RT #70307)
+    - More subtle cleanup procedure (RT #70392)
+
+0.09  2011-08-23 
     - Changes in the new() method:
        * it automatically calls start()
        * it has the 'shared' option to start a shared bridge
