@@ -1,7 +1,7 @@
 ---
-abstract: 'Perl interface to control the R statistical program'
+abstract: 'Perl interface with the R statistical program'
 author:
-  - 'Graciliano M. P. <gm@virtuasites.com.br>'
+  - 'Florent Angly <florent.angly@gmail.com> (2011 rewrite)'
 build_requires:
   ExtUtils::MakeMaker: 6.42
   Test::More: 0.47
@@ -19,7 +19,7 @@ no_index:
     - inc
     - t
 requires:
-  File::Which: 0
+  IPC::Run: 0
   Regexp::Common: 0
   Text::Balanced: 0
   perl: 5.6.0
@@ -28,4 +28,4 @@ resources:
   homepage: http://search.cpan.org/search?query=statistics%3A%3AR&mode=dist
   license: http://dev.perl.org/licenses/
   repository: git@github.com:bricas/statistics-r.git
-version: 0.10
+version: 0.20
