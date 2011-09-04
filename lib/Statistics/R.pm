@@ -14,12 +14,13 @@ if ( $^O =~ m/^(?:.*?win32|dos)$/i ) {
     require Statistics::R::Win32;
 }
 
-our $VERSION = '0.20';
-our $PROG    = 'R';                  # executable we are after... R
-our $EOS     = 'Statistics::R::EOS'; # string to signal the R output stream end
+our $VERSION = '0.21';
 
 our ($SHARED_BRIDGE, $SHARED_STDIN, $SHARED_STDOUT, $SHARED_STDERR);
 
+my $prog    = 'R';                  # executable we are after... R
+my $eos     = 'Statistics::R::EOS'; # string to signal the R output stream end
+my $eos_re  = qr/$eos\n$/;          # regexp to match end of R stream
 
 =head1 NAME
 
@@ -261,7 +262,7 @@ sub start {
 
       # Now, start R
       my $bridge = $self->bridge;
-      $status = $bridge->start or die "Error starting $PROG: $?\n";
+      $status = $bridge->start or die "Error starting $prog: $?\n";
       $self->bin( $bridge->{KIDS}->[0]->{PATH} );
    }
 
@@ -274,7 +275,7 @@ sub stop {
    my ($self) = @_;
    my $status = 1;
    if ($self->is_started) {
-      $status = $self->bridge->finish or die "Error stopping $PROG: $?\n";
+      $status = $self->bridge->finish or die "Error stopping $prog: $?\n";
    }
    return $status;
 }
@@ -322,7 +323,9 @@ sub run {
 
    # Pass input to R and get its output
    my $bridge = $self->bridge;
-   $bridge->pump while $bridge->pumpable and $self->stdout !~ m/$EOS\s?\z/mgc;
+   while (  $self->stdout !~ m/$eos_re/gc  &&  $bridge->pumpable  ) {
+      $bridge->pump;
+   }
 
    # Report errors
    my $err = $self->stderr;
@@ -330,7 +333,7 @@ sub run {
 
    # Parse output, save it and reinitialize stdout
    my $out = $self->stdout;
-   $out =~ s/$EOS\s?\z//mg;
+   $out =~ s/$eos_re//g;
    chomp $out;
    $self->result($out);
    $self->stdout('');
@@ -451,7 +454,7 @@ sub initialize {
    if ( $args{ r_bin } || $args{ R_bin } ) {
       $bin = $args{ r_bin } || $args{ R_bin };
    } else {
-      $bin = $PROG; # IPC::Run will find the full path for the program later
+      $bin = $prog; # IPC::Run will find the full path for the program later
    }
    $self->bin( $bin );
 
@@ -540,7 +543,7 @@ sub wrap_cmd {
    # end of stream string will appear on stdout and indicate that R has finished
    # processing the data. Note that $cmd can be multiple R commands.
    my ($self, $cmd) = @_;
-   $cmd = qq`tryCatch( {$cmd} ); write("$EOS",stdout())\n`;
+   $cmd = qq`tryCatch( {$cmd} ); write("$eos",stdout())\n`;
    return $cmd;
 }
 
