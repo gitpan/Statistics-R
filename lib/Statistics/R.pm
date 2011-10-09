@@ -14,7 +14,7 @@ if ( $^O =~ m/^(?:.*?win32|dos)$/i ) {
     require Statistics::R::Win32;
 }
 
-our $VERSION = '0.21';
+our $VERSION = '0.22';
 
 our ($SHARED_BRIDGE, $SHARED_STDIN, $SHARED_STDOUT, $SHARED_STDERR);
 
@@ -98,10 +98,48 @@ with R.
 
 =item run()
 
-Execute one or several commands passed as a string to R and return the output as
-a string. Before that, start() R if it is not yet running. Example:
+First, start() R if it is not yet running. Then, execute R commands passed as a
+string and return the output as a string. If your command fails to run in R, an
+error message will be displayed.
+
+Example:
 
    my $out = $R->run( q`print( 1 + 2 )` );
+
+If you intend on runnning many R commands, it may be convenient to pass an array
+of commands or put multiple commands in an here-doc:
+
+   # Array of R commands:
+   my $out1 = $R->run(
+      q`a <- 2`,
+      q`b <- 5`,
+      q`c <- a * b`,
+      q`print("ok")`
+   );
+
+   # Here-doc with multiple R commands:
+   my $cmds = <<EOF;
+   a <- 2
+   b <- 5
+   c <- a * b
+   print('ok')
+   EOF
+   my $out2 = $R->run($cmds);
+
+To run commands from a file, see the run_from_file() method.
+
+The output you get from run() is the combination of what R would display on the
+standard output and the standard error, but the order may differ. When loading
+modules, some may write numerous messages on standard error. You can disable
+this behavior using the following R command:
+
+   suppressPackageStartupMessages(library(library_to_load))
+
+
+=item run_from_file()
+
+Similar to run() but reads the R commands from the specified file. Internally,
+this method uses the R source() command to read the file.
 
 =item set()
 
@@ -313,34 +351,56 @@ sub bin {
 
 sub run {
    # Pass the input and get the output
-   my ($self, $cmd) = @_;
+   my ($self, @cmds) = @_;
 
    # Need to start R now if it is not already running
    $self->start if not $self->is_started;
 
-   # Wrap command for execution in R
-   $self->stdin( $self->wrap_cmd($cmd) );
 
-   # Pass input to R and get its output
-   my $bridge = $self->bridge;
-   while (  $self->stdout !~ m/$eos_re/gc  &&  $bridge->pumpable  ) {
-      $bridge->pump;
+   # Process each command
+   my $results = '';
+   for my $cmd (@cmds) {
+
+      # Wrap command for execution in R
+      $self->stdin( $self->wrap_cmd($cmd) );
+
+      # Pass input to R and get its output
+      my $bridge = $self->bridge;
+      while (  $self->stdout !~ m/$eos_re/gc  &&  $bridge->pumpable  ) {
+         $bridge->pump;
+      }
+
+      # Parse outputs, detect errors
+      my $out = $self->stdout;
+      $out =~ s/$eos_re//g;
+      chomp $out;
+      my $err = $self->stderr;
+      chomp $err;
+      if ($out =~ m/<simpleError.*?:(.*)>/sg) {
+         # Parse (multi-line) error message
+         my $err_msg = $1."\n".$err;
+         die "Problem running the R command:\n$cmd\n\nGot the error:\n$err_msg\n";
+      }
+   
+      # Save results and reinitialize
+      $results .= "\n" if $results;
+      $results .= $err.$out;
+      $self->stdout('');
+      $self->stderr('');
+
    }
 
-   # Report errors
-   my $err = $self->stderr;
-   die "Problem running an R command: $err\n" if $err;
+   $self->result($results);
 
-   # Parse output, save it and reinitialize stdout
-   my $out = $self->stdout;
-   $out =~ s/$eos_re//g;
-   chomp $out;
-   $self->result($out);
-   $self->stdout('');
-
-   return $out;
+   return $results;
 }
 
+
+sub run_from_file {
+   my ($self, $file) = @_;
+   my $results = $self->run( qq`source('$file')` );
+   return $results;
+}
 
 
 sub set {
@@ -543,7 +603,13 @@ sub wrap_cmd {
    # end of stream string will appear on stdout and indicate that R has finished
    # processing the data. Note that $cmd can be multiple R commands.
    my ($self, $cmd) = @_;
-   $cmd = qq`tryCatch( {$cmd} ); write("$eos",stdout())\n`;
+
+   # Escape double-quotes
+   $cmd =~ s/"/\\"/g;
+
+   # Evaluate command (and catch syntax and runtime errors)
+   $cmd = qq`tryCatch( eval(parse(text="$cmd")) , error = function(e){print(e)} ); write("$eos",stdout())\n`;
+
    return $cmd;
 }
 

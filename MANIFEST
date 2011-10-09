@@ -23,3 +23,5 @@ t/04-start-stop.t
 t/05-shared.t
 t/06-get-set.t
 t/07-robust.t
+t/08-errors.t
+t/data/script.R
