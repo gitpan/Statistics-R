@@ -14,7 +14,7 @@ if ( $^O =~ m/^(?:.*?win32|dos)$/i ) {
     require Statistics::R::Win32;
 }
 
-our $VERSION = '0.22';
+our $VERSION = '0.23';
 
 our ($SHARED_BRIDGE, $SHARED_STDIN, $SHARED_STDOUT, $SHARED_STDERR);
 
@@ -422,7 +422,7 @@ sub set {
    # Quote strings and nullify undef variables
    for (my $i = 0; $i < scalar @$arr; $i++) {
       if (defined $$arr[$i]) {
-         if ( $$arr[$i] !~ /$RE{num}{real}/ ) {
+         if ( $$arr[$i] !~ /^$RE{num}{real}$/ ) {
             $$arr[$i] = '"'.$$arr[$i].'"';
          }
       } else {
