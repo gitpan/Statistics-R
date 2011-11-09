@@ -14,7 +14,7 @@ if ( $^O =~ m/^(?:.*?win32|dos)$/i ) {
     require Statistics::R::Win32;
 }
 
-our $VERSION = '0.23';
+our $VERSION = '0.24';
 
 our ($SHARED_BRIDGE, $SHARED_STDIN, $SHARED_STDOUT, $SHARED_STDERR);
 
@@ -211,7 +211,7 @@ You also need to have the following CPAN Perl modules installed:
 
 =over 4
 
-=item Text::Balanced
+=item Text::Balanced (>= 1.97)
 
 =item Regexp::Common
 

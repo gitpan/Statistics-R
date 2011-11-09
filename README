@@ -161,7 +161,7 @@ INSTALLATION
 
     You also need to have the following CPAN Perl modules installed:
 
-    Text::Balanced
+    Text::Balanced (>= 1.97)
     Regexp::Common
     IPC::Run
 
