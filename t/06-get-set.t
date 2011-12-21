@@ -5,9 +5,6 @@ use warnings;
 use Test::More;
 use Statistics::R;
 
-plan tests => 86;
-
-
 my ($R, $input, $output);
 
 
@@ -95,5 +92,15 @@ is $$output[1], 2;
 is $$output[2], 3;
 
 
+# Bug reported by Manuel A. Alonso Tarajano
+is $R->run(q`mydat = seq(1:4)`), '';
+ok $output = $R->get('mydat');
+is $$output[0], 1;
+is $$output[1], 2;
+is $$output[2], 3;
+is $$output[3], 4;
+
+
 ok $R->stop();
 
+done_testing;

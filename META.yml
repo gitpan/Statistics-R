@@ -3,10 +3,10 @@ abstract: 'Perl interface with the R statistical program'
 author:
   - 'Florent Angly <florent.angly@gmail.com> (2011 rewrite)'
 build_requires:
-  ExtUtils::MakeMaker: 6.56
+  ExtUtils::MakeMaker: 6.57
   Test::More: 0.47
 configure_requires:
-  ExtUtils::MakeMaker: 6.56
+  ExtUtils::MakeMaker: 6.57
 distribution_type: module
 dynamic_config: 1
 generated_by: 'Module::Install version 1.04'
@@ -29,4 +29,4 @@ resources:
   homepage: http://search.cpan.org/search?query=statistics%3A%3AR&mode=dist
   license: http://dev.perl.org/licenses/
   repository: git@github.com:bricas/statistics-r.git
-version: 0.24
+version: 0.25

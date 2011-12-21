@@ -14,7 +14,7 @@ if ( $^O =~ m/^(?:.*?win32|dos)$/i ) {
     require Statistics::R::Win32;
 }
 
-our $VERSION = '0.24';
+our $VERSION = '0.25';
 
 our ($SHARED_BRIDGE, $SHARED_STDIN, $SHARED_STDOUT, $SHARED_STDERR);
 
@@ -147,16 +147,15 @@ Set the value of an R variable (scalar or arrayref). Example:
 
   $R->set( 'x', 'pear' );
 
-or 
+or
 
   $R->set( 'y', [1, 2, 3] );
-
 
 =item get()
  
 Get the value of an R variable (scalar or arrayref). Example:
 
-  my $x = $R->get( 'x' );  # $y is an scalar
+  my $x = $R->get( 'x' );  # $y is a scalar
 
 or
 
@@ -474,20 +473,28 @@ sub get {
    if (not defined $value) {
       @arr = ( undef );
    } else {
-      # Split string into an array, paying attention to strings containing spaces
-      @arr = extract_multiple( $value, [sub { extract_delimited($_[0],q{ '"}) },] );
-      for (my $i = 0; $i < scalar @arr; $i++) {
-         my $elem = $arr[$i];
-         if ($elem =~ m/^\s*$/) {
-            # Remove elements that are simply whitespaces
-            splice @arr, $i, 1;
-            $i--;
-         } else {
-            # Trim whitespaces
-            $arr[$i] =~ s/^\s*(.*?)\s*$/$1/;
-            # Remove double-quotes
-            $arr[$i] =~ s/^"(.*)"$/$1/; 
+      # Split string into an array, paying attention to strings containing spaces:
+      # extract_delim should be enough but we use extract_delim + split because
+      # of Text::Balanced bug #73416
+      if ($value =~ m{['"]}) {
+         @arr = extract_multiple( $value, [sub { extract_delimited($_[0],q{'"}) },] );
+         for (my $i = 0; $i < scalar @arr; $i++) {
+            my $elem = $arr[$i];
+            if ($elem =~ m/^\s*$/) {
+               # Remove elements that are simply whitespaces
+               splice @arr, $i, 1;
+               $i--;
+            } else {
+               # Trim whitespaces
+               $arr[$i] =~ s/^\s*(.*?)\s*$/$1/;
+               # Remove double-quotes
+               $arr[$i] =~ s/^"(.*)"$/$1/; 
+            }
          }
+      } else {
+         $value =~ s{^\s+}{};
+         $value =~ s{\s+$}{};
+         @arr = split( /\s+/, $value );
       }
    }
 
