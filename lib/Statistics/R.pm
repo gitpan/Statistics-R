@@ -14,13 +14,25 @@ if ( $^O =~ m/^(?:.*?win32|dos)$/i ) {
     require Statistics::R::Win32;
 }
 
-our $VERSION = '0.26';
+our $VERSION = '0.27';
 
 our ($SHARED_BRIDGE, $SHARED_STDIN, $SHARED_STDOUT, $SHARED_STDERR);
 
-my $prog    = 'R';                  # executable we are after... R
-my $eos     = 'Statistics::R::EOS'; # string to signal the R output stream end
-my $eos_re  = qr/$eos\n$/;          # regexp to match end of R stream
+
+use constant PROG       => 'R';                           # executable name... R
+
+use constant EOS        => '\\1';                         # indicate the end of R output with \1
+use constant EOS_RE     => qr/[${\(EOS)}]\n$/;            # regexp to match end of R stream
+
+#use constant EOS        => 'Statistics::R::EOS';          # indicate the end of R output
+#use constant EOS_RE     => qr/${\(EOS)}\n$/;              # regexp to match end of R stream
+
+use constant NUMBER_RE  => qr/^$RE{num}{real}$/;          # regexp matching numbers
+use constant BLANK_RE   => qr/^\s*$/;                     # regexp matching whitespaces
+use constant ILINE_RE   => qr/^\s*\[\d+\] /;              # regexp matching indexed line
+use constant USR_ERR_RE => qr/<simpleError.*?:\s*(.*)>/s; # regexp for user error
+use constant INT_ERR_RE => qr/^Error:\s*(.*)/s;           # regexp for internal error
+
 
 =head1 NAME
 
@@ -135,6 +147,15 @@ this behavior using the following R command:
 
    suppressPackageStartupMessages(library(library_to_load))
 
+Note that R imposes an upper limit on how many characters can be contained on a
+line: about 4076 bytes maximum. You will be warned if this occurs. Commands
+containing lines exceeding the limit may fail with an error message stating:
+
+  '\�' is an unrecognized escape in character string starting "...
+
+If possible, break down your R code into several smaller, more manageable
+statements. Alternatively, adding newline characters "\n" at strategic places in
+the R statements will work around the issue.
 
 =item run_from_file()
 
@@ -210,11 +231,11 @@ You also need to have the following CPAN Perl modules installed:
 
 =over 4
 
-=item Text::Balanced (>= 1.97)
+=item IPC::Run
 
 =item Regexp::Common
 
-=item IPC::Run
+=item Text::Balanced (>= 1.97)
 
 =back
 
@@ -257,7 +278,7 @@ Bug reports, suggestions and patches are welcome. The Statistics::R code is
 developed on Github (L<http://github.com/bricas/statistics-r>) and is under Git
 revision control. To get the latest revision, run:
 
-   git clone git@github.com:bricas/statistics-r.git
+   git clone git://github.com/bricas/statistics-r.git
 
 =cut
 
@@ -299,7 +320,7 @@ sub start {
 
       # Now, start R
       my $bridge = $self->bridge;
-      $status = $bridge->start or die "Error starting $prog: $?\n";
+      $status = $bridge->start or die "Error starting ".PROG.": $?\n";
       $self->bin( $bridge->{KIDS}->[0]->{PATH} );
    }
 
@@ -312,7 +333,7 @@ sub stop {
    my ($self) = @_;
    my $status = 1;
    if ($self->is_started) {
-      $status = $self->bridge->finish or die "Error stopping $prog: $?\n";
+      $status = $self->bridge->finish or die "Error stopping ".PROG.": $?\n";
    }
    return $status;
 }
@@ -365,20 +386,28 @@ sub run {
 
       # Pass input to R and get its output
       my $bridge = $self->bridge;
-      while (  $self->stdout !~ m/$eos_re/gc  &&  $bridge->pumpable  ) {
+      while (  $self->stdout !~ EOS_RE  &&  $bridge->pumpable  ) {
          $bridge->pump;
       }
 
       # Parse outputs, detect errors
       my $out = $self->stdout;
-      $out =~ s/$eos_re//g;
+      $out =~ s/${\(EOS_RE)}//;
       chomp $out;
       my $err = $self->stderr;
       chomp $err;
-      if ($out =~ m/<simpleError.*?:(.*)>/sg) {
-         # Parse (multi-line) error message
-         my $err_msg = $1."\n".$err;
-         die "Problem running the R command:\n$cmd\n\nGot the error:\n$err_msg\n";
+      if ( $out =~ USR_ERR_RE ) {
+         # User-space (multi-line) error message
+         die "Problem running this R command:\n$cmd\n\nGot the error:\n$1\n$err\n";
+      } elsif ($err =~ INT_ERR_RE) {
+         # Internal error
+         my $err_msg = $1;
+         if ( $err_msg =~ /unrecognized escape in character string/ ) {
+            $err_msg .= "\nMost likely, your R command contained lines exceeding ".
+               " 4076 bytes...";
+         }
+         die "Internal problem while running this R command:\n$cmd\n\nGot the error:\n$err_msg\n";
+
       }
    
       # Save results and reinitialize
@@ -386,7 +415,6 @@ sub run {
       $results .= $err.$out;
       $self->stdout('');
       $self->stderr('');
-
    }
 
    $self->result($results);
@@ -419,19 +447,20 @@ sub set {
    }
 
    # Quote strings and nullify undef variables
-   for (my $i = 0; $i < scalar @$arr; $i++) {
+   for my $i (0 .. scalar @$arr - 1) {
       if (defined $$arr[$i]) {
-         if ( $$arr[$i] !~ /^$RE{num}{real}$/ ) {
-            $$arr[$i] = '"'.$$arr[$i].'"';
+         if ( $$arr[$i] !~ NUMBER_RE ) {
+            $$arr[$i] = _quote( $$arr[$i] );
          }
       } else {
          $$arr[$i] = 'NULL';
       }
    }
 
-   # Build a string and run it to import data
-   my $cmd = $varname.' <- c('.join(', ',@$arr).')';
-   $self->run($cmd);
+   # Build a variable assignment string command. Sprinkle it with "\n" to avoid
+   # running into R max line limits. Then run it!
+   $self->run( $varname.'<-c('.join(",\n",@$arr).')' );
+
    return 1;
 }
 
@@ -445,13 +474,13 @@ sub get {
    my $value;
    if ($string eq 'NULL') {
       $value = undef;
-   } elsif ($string =~ m/^\s*\[\d+\]/) {
+   } elsif ($string =~ ILINE_RE) {
       # Vector: its string look like:
       # ' [1]  6.4 13.3  4.1  1.3 14.1 10.6  9.9  9.6 15.3
       #  [16]  5.2 10.9 14.4'
       my @lines = split /\n/, $string;
-      for (my $i = 0; $i < scalar @lines; $i++) {
-         $lines[$i] =~ s/^\s*\[\d+\] //;
+      for my $i (0 .. scalar @lines - 1) {
+         $lines[$i] =~ s/${\(ILINE_RE)}//;
       }
       $value = join ' ', @lines;
    } else {
@@ -460,10 +489,8 @@ sub get {
          # String looks like: '    mean 
          # 10.41111 '
          # Extract value from second line
-         $value = $lines[1];
-         $value =~ s/^\s*(\S+)\s*$/$1/;
+         $value = _trim( $lines[1] );
       } else {
-         #die "Error: Don't know how to handle this R output\n$string\n";
          $value = $string;
       }
    }
@@ -478,23 +505,22 @@ sub get {
       # of Text::Balanced bug #73416
       if ($value =~ m{['"]}) {
          @arr = extract_multiple( $value, [sub { extract_delimited($_[0],q{'"}) },] );
-         for (my $i = 0; $i < scalar @arr; $i++) {
+         my $nof_empty = 0;
+         for my $i (0 .. scalar @arr - 1) {
             my $elem = $arr[$i];
-            if ($elem =~ m/^\s*$/) {
-               # Remove elements that are simply whitespaces
-               splice @arr, $i, 1;
-               $i--;
+            if ($arr[$i] =~ BLANK_RE) {
+               # Remove elements that are simply whitespaces later, in a single operation
+               $nof_empty++;
             } else {
-               # Trim whitespaces
-               $arr[$i] =~ s/^\s*(.*?)\s*$/$1/;
-               # Remove double-quotes
-               $arr[$i] =~ s/^"(.*)"$/$1/; 
+               # Trim and unquote
+               $arr[$i-$nof_empty] = _unquote( _trim($elem) );
             }
          }
+         if ($nof_empty > 0) {
+            splice @arr, -$nof_empty, $nof_empty;
+         }
       } else {
-         $value =~ s{^\s+}{};
-         $value =~ s{\s+$}{};
-         @arr = split( /\s+/, $value );
+         @arr = split( /\s+/, _trim($value) );
       }
    }
 
@@ -521,7 +547,7 @@ sub initialize {
    if ( $args{ r_bin } || $args{ R_bin } ) {
       $bin = $args{ r_bin } || $args{ R_bin };
    } else {
-      $bin = $prog; # IPC::Run will find the full path for the program later
+      $bin = PROG; # IPC::Run will find the full path for the program later
    }
    $self->bin( $bin );
 
@@ -542,6 +568,7 @@ sub initialize {
 sub bridge {
    # Get or build the communication bridge and IOs with R
    my ($self, $build) = @_;
+   my %params = ( debug => 0 );
    if ($build) {
       my $cmd = [ $self->bin, '--vanilla', '--slave' ];
       if (not $self->is_shared) {
@@ -549,14 +576,14 @@ sub bridge {
          $self->{stdin}  = \$stdin;
          $self->{stdout} = \$stdout;
          $self->{stderr} = \$stderr;
-         $self->{bridge} = harness $cmd, $self->{stdin}, $self->{stdout}, $self->{stderr};
+         $self->{bridge} = harness $cmd, $self->{stdin}, $self->{stdout}, $self->{stderr}, %params;
       } else {
          $self->{stdin}  = \$SHARED_STDIN ;
          $self->{stdout} = \$SHARED_STDOUT;
          $self->{stderr} = \$SHARED_STDERR;
          if (not defined $SHARED_BRIDGE) {
             # The first Statics::R instance builds the bridge
-            $SHARED_BRIDGE = harness $cmd, $self->{stdin}, $self->{stdout}, $self->{stderr};
+            $SHARED_BRIDGE = harness $cmd, $self->{stdin}, $self->{stdout}, $self->{stderr}, %params;
          }
          $self->{bridge} = $SHARED_BRIDGE;
       }
@@ -611,14 +638,55 @@ sub wrap_cmd {
    # processing the data. Note that $cmd can be multiple R commands.
    my ($self, $cmd) = @_;
 
-   # Escape double-quotes
-   $cmd =~ s/"/\\"/g;
-
    # Evaluate command (and catch syntax and runtime errors)
-   $cmd = qq`tryCatch( eval(parse(text="$cmd")) , error = function(e){print(e)} ); write("$eos",stdout())\n`;
+   $cmd = _quote($cmd);
+   $cmd = qq`tryCatch( eval(parse(text=$cmd)), error = function(e){print(e)} ); `.
+          qq`write("`.EOS.qq`",stdout())\n`;
 
    return $cmd;
 }
 
+
+#---------- HELPER SUBS -------------------------------------------------------#
+
+
+sub _trim {
+   # Remove flanking whitespaces
+   my ($str) = @_;
+   $str =~ s{^\s+}{};
+   $str =~ s{\s+$}{};
+   return $str;
+}
+
+
+sub _quote {
+   # Quote a string for use in R. We use double-quotes because the documentation
+   # Quotes {base} R documentation states that this is preferred over single-
+   # quotes. Double-quotes inside the string are escaped.
+   my ($str) = @_;
+
+   # Escape " by \" , \" by \\\" , ...
+   $str =~ s/ (\\*) " / '\\' x (2*length($1)+1) . '"' /egx;
+
+   # Surround by "
+   $str = qq("$str");
+
+   return $str;
+}
+
+
+sub _unquote {
+   # Opposite of _quote
+   my ($str) = @_;
+
+   # Remove surrounding "
+   $str =~ s{^"}{};
+   $str =~ s{"$}{};
+
+   # Interpolate (de-escape) \\\" to \" , \" to " , ...
+   $str =~ s/ ((?:\\\\)*) \\ " / '\\' x (length($1)*0.5) . '"' /egx;
+
+   return $str;
+}
 
 1;

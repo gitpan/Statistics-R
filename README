@@ -99,6 +99,17 @@ METHODS
 
            suppressPackageStartupMessages(library(library_to_load))
 
+        Note that R imposes an upper limit on how many characters can be
+        contained on a line: about 4076 bytes maximum. You will be warned if
+        this occurs. Commands containing lines exceeding the limit may fail
+        with an error message stating:
+
+          '\�' is an unrecognized escape in character string starting "...
+
+        If possible, break down your R code into several smaller, more
+        manageable statements. Alternatively, adding newline characters "\n"
+        at strategic places in the R statements will work around the issue.
+
     run_from_file()
         Similar to run() but reads the R commands from the specified file.
         Internally, this method uses the R source() command to read the
@@ -161,9 +172,9 @@ INSTALLATION
 
     You also need to have the following CPAN Perl modules installed:
 
-    Text::Balanced (>= 1.97)
-    Regexp::Common
     IPC::Run
+    Regexp::Common
+    Text::Balanced (>= 1.97)
 
 SEE ALSO
     *   Statistics::R::Win32
@@ -196,5 +207,5 @@ BUGS
     is developed on Github (<http://github.com/bricas/statistics-r>) and is
     under Git revision control. To get the latest revision, run:
 
-       git clone git@github.com:bricas/statistics-r.git
+       git clone git://github.com/bricas/statistics-r.git
 
