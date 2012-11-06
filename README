@@ -104,7 +104,7 @@ METHODS
         this occurs. Commands containing lines exceeding the limit may fail
         with an error message stating:
 
-          '\�' is an unrecognized escape in character string starting "...
+          '\0' is an unrecognized escape in character string starting "...
 
         If possible, break down your R code into several smaller, more
         manageable statements. Alternatively, adding newline characters "\n"
@@ -116,22 +116,26 @@ METHODS
         file.
 
     set()
-        Set the value of an R variable (scalar or arrayref). Example:
+        Set the value of an R variable (scalar or vector). Example:
 
+          # Create an R scalar
           $R->set( 'x', 'pear' );
 
         or
 
+          # Create an R list
           $R->set( 'y', [1, 2, 3] );
 
     get()
-        Get the value of an R variable (scalar or arrayref). Example:
+        Get the value of an R variable (scalar or vector). Example:
 
-          my $x = $R->get( 'x' );  # $y is a scalar
+          # Retrieve an R scalar. $x is a Perl scalar.
+          my $x = $R->get( 'x' );
 
         or
 
-          my $y = $R->get( 'y' );  # $x is an arrayref
+          # Retrieve an R list. $x is a Perl arrayref.
+          my $y = $R->get( 'y' );
 
     start()
         Explicitly start R. Most times, you do not need to do that because

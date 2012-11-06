@@ -14,7 +14,7 @@ if ( $^O =~ m/^(?:.*?win32|dos)$/i ) {
     require Statistics::R::Win32;
 }
 
-our $VERSION = '0.27';
+our $VERSION = '0.28';
 
 our ($SHARED_BRIDGE, $SHARED_STDIN, $SHARED_STDOUT, $SHARED_STDERR);
 
@@ -151,7 +151,7 @@ Note that R imposes an upper limit on how many characters can be contained on a
 line: about 4076 bytes maximum. You will be warned if this occurs. Commands
 containing lines exceeding the limit may fail with an error message stating:
 
-  '\�' is an unrecognized escape in character string starting "...
+  '\0' is an unrecognized escape in character string starting "...
 
 If possible, break down your R code into several smaller, more manageable
 statements. Alternatively, adding newline characters "\n" at strategic places in
@@ -164,23 +164,27 @@ this method uses the R source() command to read the file.
 
 =item set()
 
-Set the value of an R variable (scalar or arrayref). Example:
+Set the value of an R variable (scalar or vector). Example:
 
+  # Create an R scalar
   $R->set( 'x', 'pear' );
 
 or
 
+  # Create an R list
   $R->set( 'y', [1, 2, 3] );
 
 =item get()
  
-Get the value of an R variable (scalar or arrayref). Example:
+Get the value of an R variable (scalar or vector). Example:
 
-  my $x = $R->get( 'x' );  # $y is a scalar
+  # Retrieve an R scalar. $x is a Perl scalar.
+  my $x = $R->get( 'x' );
 
 or
 
-  my $y = $R->get( 'y' );  # $x is an arrayref
+  # Retrieve an R list. $x is a Perl arrayref.
+  my $y = $R->get( 'y' );
 
 =item start()
 
