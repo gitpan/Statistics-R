@@ -8,15 +8,6 @@ inc/Module/Install/Makefile.pm
 inc/Module/Install/Metadata.pm
 inc/Module/Install/Win32.pm
 inc/Module/Install/WriteAll.pm
-inc_old/Module/Install.pm
-inc_old/Module/Install/Base.pm
-inc_old/Module/Install/Can.pm
-inc_old/Module/Install/External.pm
-inc_old/Module/Install/Fetch.pm
-inc_old/Module/Install/Makefile.pm
-inc_old/Module/Install/Metadata.pm
-inc_old/Module/Install/Win32.pm
-inc_old/Module/Install/WriteAll.pm
 lib/Statistics/R.pm
 lib/Statistics/R/Legacy.pm
 lib/Statistics/R/Win32.pm

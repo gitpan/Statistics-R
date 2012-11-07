@@ -112,8 +112,9 @@ METHODS
 
     run_from_file()
         Similar to run() but reads the R commands from the specified file.
-        Internally, this method uses the R source() command to read the
-        file.
+        Internally, this method converts the filename to a format compatible
+        with R and then passes it to the R source() command to read the file
+        and execute the commands.
 
     set()
         Set the value of an R variable (scalar or vector). Example:
