@@ -57,13 +57,17 @@ METHODS
                my $x = $R2->get( 'x' );
                print "x = $x\n";
 
-            Do not call the *stop()* method is you still have processes that
-            need to interact with R.
+               $R1->stop; # or $R2->stop
+
+            Note that in shared mode, you are responsible to have one of
+            your Statistics::R instances call the *stop()* method when you
+            are finished with R. But be careful not to call the *stop()*
+            method if you still have processes that need to interact with R!
 
     run()
-        First, start() R if it is not yet running. Then, execute R commands
-        passed as a string and return the output as a string. If your
-        command fails to run in R, an error message will be displayed.
+        First, *start()* R if it is not yet running. Then, execute R
+        commands passed as a string and return the output as a string. If
+        your command fails to run in R, an error message will be displayed.
 
         Example:
 
@@ -89,9 +93,9 @@ METHODS
            EOF
            my $out2 = $R->run($cmds);
 
-        To run commands from a file, see the run_from_file() method.
+        To run commands from a file, see the *run_from_file()* method.
 
-        The output you get from run() is the combination of what R would
+        The output you get from *run()* is the combination of what R would
         display on the standard output and the standard error, but the order
         may differ. When loading modules, some may write numerous messages
         on standard error. You can disable this behavior using the following
@@ -111,10 +115,10 @@ METHODS
         at strategic places in the R statements will work around the issue.
 
     run_from_file()
-        Similar to run() but reads the R commands from the specified file.
+        Similar to *run()* but reads the R commands from the specified file.
         Internally, this method converts the filename to a format compatible
-        with R and then passes it to the R source() command to read the file
-        and execute the commands.
+        with R and then passes it to the R *source()* command to read the
+        file and execute the commands.
 
     set()
         Set the value of an R variable (scalar or vector). Example:
@@ -140,11 +144,13 @@ METHODS
 
     start()
         Explicitly start R. Most times, you do not need to do that because
-        the first execution of run() or set() will automatically call
-        start().
+        the first execution of *run()* or *set()* will automatically call
+        *start()*.
 
     stop()
-        Stop a running instance of R.
+        Stop a running instance of R. Usually, you do not need to do this
+        because stop() is automatically the Statistics::R object goes out of
+        scope.
 
     restart()
         stop() and start() R.

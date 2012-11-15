@@ -69,17 +69,21 @@ Statistics::R can communicate with the same unique R instance. Example:
    my $x = $R2->get( 'x' );
    print "x = $x\n";
 
-Do not call the I<stop()> method is you still have processes that need to interact
-with R.
+   $R1->stop; # or $R2->stop
+
+Note that in shared mode, you are responsible to have one of your Statistics::R
+instances call the I<stop()> method when you are finished with R. But be careful
+not to call the I<stop()> method if you still have processes that need to
+interact with R!
 
 =back
 
 
 =item run()
 
-First, start() R if it is not yet running. Then, execute R commands passed as a
-string and return the output as a string. If your command fails to run in R, an
-error message will be displayed.
+First, I<start()> R if it is not yet running. Then, execute R commands passed as
+a string and return the output as a string. If your command fails to run in R,
+an error message will be displayed.
 
 Example:
 
@@ -105,9 +109,9 @@ of commands or put multiple commands in an here-doc:
    EOF
    my $out2 = $R->run($cmds);
 
-To run commands from a file, see the run_from_file() method.
+To run commands from a file, see the I<run_from_file()> method.
 
-The output you get from run() is the combination of what R would display on the
+The output you get from I<run()> is the combination of what R would display on the
 standard output and the standard error, but the order may differ. When loading
 modules, some may write numerous messages on standard error. You can disable
 this behavior using the following R command:
@@ -126,9 +130,9 @@ the R statements will work around the issue.
 
 =item run_from_file()
 
-Similar to run() but reads the R commands from the specified file. Internally,
+Similar to I<run()> but reads the R commands from the specified file. Internally,
 this method converts the filename to a format compatible with R and then passes
-it to the R source() command to read the file and execute the commands.
+it to the R I<source()> command to read the file and execute the commands.
 
 =item set()
 
@@ -157,11 +161,12 @@ or
 =item start()
 
 Explicitly start R. Most times, you do not need to do that because the first
-execution of run() or set() will automatically call start().
+execution of I<run()> or I<set()> will automatically call I<start()>.
 
 =item stop()
 
-Stop a running instance of R.
+Stop a running instance of R. Usually, you do not need to do this because stop()
+is automatically the Statistics::R object goes out of scope.
 
 =item restart()
 
@@ -268,7 +273,7 @@ if ( $^O =~ m/^(?:.*?win32|dos)$/i ) {
     require Statistics::R::Win32;
 }
 
-our $VERSION = '0.29';
+our $VERSION = '0.30';
 
 our ($SHARED_BRIDGE, $SHARED_STDIN, $SHARED_STDOUT, $SHARED_STDERR);
 
@@ -337,7 +342,7 @@ sub start {
 sub stop {
    my ($self) = @_;
    my $status = 1;
-   if ($self->is_started) {
+   if ( ($self->is_started) && (not $self->{died}) ) {
       $status = $self->bridge->finish or die "Error stopping ".PROG.": $?\n";
    }
    return $status;
@@ -351,15 +356,28 @@ sub restart {
 
 
 sub is_started {
-   # Query whether or not R is currently running
-   return shift->bridge->{STATE} eq IPC::Run::_started ? 1 : 0;
+   # Query whether or not R is currently running - hackish
+   my ($self) = @_;
+   my $bridge = $self->bridge;
+   if (not exists $bridge->{STATE}) {
+      die "Internal error: could not get STATE from IPC::Run\n";
+   }
+   return $bridge->{STATE} eq IPC::Run::_started ? 1 : 0;
 }
 
 
 sub pid {
-   # Get (/ set) the PID of the running R process. It is accessible only after
-   # the bridge has start()ed
-   return shift->bridge->{KIDS}->[0]->{PID};
+   # Get (/ set) the PID of the running R process - hackish. It is accessible
+   # only after the bridge has start()ed
+   my ($self) = @_;
+   my $bridge = $self->bridge;
+   if ( not exists $bridge->{KIDS} ) {
+      die "Internal error: could not get KIDS from IPC::Run\n";
+   }
+   if ( not exists $bridge->{KIDS}->[0]->{PID} ) {
+      die "Internal error: could not get PID from IPC::Run\n";
+   }
+   return $bridge->{KIDS}->[0]->{PID};
 }
 
 
@@ -395,7 +413,7 @@ sub run {
          $bridge->pump;
       }
 
-      # Parse outputs, detect errors
+      # Parse output, detect errors
       my $out = $self->stdout;
       $out =~ s/${\(EOS_RE)}//;
       chomp $out;
@@ -403,9 +421,12 @@ sub run {
       chomp $err;
       if ( $out =~ USR_ERR_RE ) {
          # User-space (multi-line) error message
+         $self->stdout(''); # for proper next execution after failed eval
+         $self->stderr('');
          die "Problem running this R command:\n$cmd\n\nGot the error:\n$1\n$err\n";
       } elsif ($err =~ INT_ERR_RE) {
          # Internal error
+         $self->{died} = 1; # for proper cleanup after failed eval
          my $err_msg = $1;
          if ( $err_msg =~ /unrecognized escape in character string/ ) {
             $err_msg .= "\nMost likely, your R command contained lines exceeding ".
@@ -606,7 +627,7 @@ sub bridge {
          $self->{stdout} = \$SHARED_STDOUT;
          $self->{stderr} = \$SHARED_STDERR;
          if (not defined $SHARED_BRIDGE) {
-            # The first Statics::R instance builds the bridge
+            # The first Statistics::R instance builds the bridge
             $SHARED_BRIDGE = harness $cmd, $self->{stdin}, $self->{stdout}, $self->{stderr}, %params;
          }
          $self->{bridge} = $SHARED_BRIDGE;
@@ -711,6 +732,16 @@ sub _unquote {
    $str =~ s/ ((?:\\\\)*) \\ " / '\\' x (length($1)*0.5) . '"' /egx;
 
    return $str;
+}
+
+
+sub DESTROY {
+   # The bridge to R is not automatically bombed when Statistics::R instances
+   # get out of scope. Do it now (unless running in shared mode)!
+   my ($self) = @_;
+   if (not $self->is_shared) {
+      $self->stop;
+   }
 }
 
 1;
