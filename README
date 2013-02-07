@@ -165,7 +165,7 @@ METHODS
         Is R running?
 
     pid()
-        Return the pid of the running R process
+        Return the PID of the running R process
 
 INSTALLATION
     Since *Statistics::R* relies on R to work, you need to install R first.

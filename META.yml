@@ -29,4 +29,4 @@ resources:
   homepage: http://search.cpan.org/search?query=statistics%3A%3AR&mode=dist
   license: http://dev.perl.org/licenses/
   repository: git@github.com:bricas/statistics-r.git
-version: 0.30
+version: 0.31

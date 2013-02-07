@@ -186,7 +186,7 @@ Is R running?
 
 =item pid()
 
-Return the pid of the running R process
+Return the PID of the running R process
 
 =back
 
@@ -273,24 +273,21 @@ if ( $^O =~ m/^(?:.*?win32|dos)$/i ) {
     require Statistics::R::Win32;
 }
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 our ($SHARED_BRIDGE, $SHARED_STDIN, $SHARED_STDOUT, $SHARED_STDERR);
 
-
+use constant DEBUG      => 0;                             # debugging messages
 use constant PROG       => 'R';                           # executable name... R
 
 use constant EOS        => '\\1';                         # indicate the end of R output with \1
 use constant EOS_RE     => qr/[${\(EOS)}]\n$/;            # regexp to match end of R stream
 
-#use constant EOS        => 'Statistics::R::EOS';          # indicate the end of R output
-#use constant EOS_RE     => qr/${\(EOS)}\n$/;              # regexp to match end of R stream
-
 use constant NUMBER_RE  => qr/^$RE{num}{real}$/;          # regexp matching numbers
 use constant BLANK_RE   => qr/^\s*$/;                     # regexp matching whitespaces
 use constant ILINE_RE   => qr/^\s*\[\d+\] /;              # regexp matching indexed line
-use constant USR_ERR_RE => qr/<simpleError.*?:\s*(.*)>/s; # regexp for user error
-use constant INT_ERR_RE => qr/^Error:\s*(.*)/s;           # regexp for internal error
+
+my $ERROR_RE;                                             # regexp matching R errors
 
 
 sub new {
@@ -304,7 +301,7 @@ sub new {
 
 
 sub is_shared {
-   # Get (/ set) the whether or not Statistics::R is setup to run in shared mode
+   # Get (or set) the whether or not Statistics::R is setup to run in shared mode
    my ($self, $val) = @_;
    if (defined $val) {
       $self->{is_shared} = $val;
@@ -332,6 +329,14 @@ sub start {
       my $bridge = $self->bridge;
       $status = $bridge->start or die "Error starting ".PROG.": $?\n";
       $self->bin( $bridge->{KIDS}->[0]->{PATH} );
+      print "DBG: Started R, ".$self->bin." (pid ".$self->pid.")\n" if DEBUG;
+
+      # Generate regexp to catch R errors
+      if (not defined $ERROR_RE) {
+         $self->_gen_error_re;
+         print "DBG: Regexp for internal errors is '$ERROR_RE'\n" if DEBUG;
+      }
+
    }
 
    return $status;
@@ -344,6 +349,7 @@ sub stop {
    my $status = 1;
    if ( ($self->is_started) && (not $self->{died}) ) {
       $status = $self->bridge->finish or die "Error stopping ".PROG.": $?\n";
+      print "DBG: Stopped R\n" if DEBUG;
    }
    return $status;
 }
@@ -367,7 +373,7 @@ sub is_started {
 
 
 sub pid {
-   # Get (/ set) the PID of the running R process - hackish. It is accessible
+   # Get (or set) the PID of the running R process - hackish. It is accessible
    # only after the bridge has start()ed
    my ($self) = @_;
    my $bridge = $self->bridge;
@@ -382,7 +388,7 @@ sub pid {
 
 
 sub bin {
-   # Get / set the full path to the R binary program to use. Unless you have set
+   # Get or set the full path to the R binary program to use. Unless you have set
    # the path yourself, it is accessible only after the bridge has start()ed
    my ($self, $val) = @_;
    if (defined $val) {
@@ -399,13 +405,14 @@ sub run {
    # Need to start R now if it is not already running
    $self->start if not $self->is_started;
 
-
    # Process each command
    my $results = '';
    for my $cmd (@cmds) {
 
       # Wrap command for execution in R
+      print "DBG: Command is '$cmd'\n" if DEBUG;
       $self->stdin( $self->wrap_cmd($cmd) );
+      print "DBG: Stdin is '".$self->stdin."'\n" if DEBUG;
 
       # Pass input to R and get its output
       my $bridge = $self->bridge;
@@ -419,21 +426,30 @@ sub run {
       chomp $out;
       my $err = $self->stderr;
       chomp $err;
-      if ( $out =~ USR_ERR_RE ) {
-         # User-space (multi-line) error message
-         $self->stdout(''); # for proper next execution after failed eval
-         $self->stderr('');
-         die "Problem running this R command:\n$cmd\n\nGot the error:\n$1\n$err\n";
-      } elsif ($err =~ INT_ERR_RE) {
-         # Internal error
-         $self->{died} = 1; # for proper cleanup after failed eval
-         my $err_msg = $1;
-         if ( $err_msg =~ /unrecognized escape in character string/ ) {
-            $err_msg .= "\nMost likely, your R command contained lines exceeding ".
-               " 4076 bytes...";
-         }
-         die "Internal problem while running this R command:\n$cmd\n\nGot the error:\n$err_msg\n";
 
+      print "DBG: Stdout is '$out'\n" if DEBUG;
+      print "DBG: Stderr is '$err'\n" if DEBUG;
+
+      my $err_msg;
+      if ( (defined $ERROR_RE) && ($err =~ $ERROR_RE)) {
+         # Catch errors on stderr. Leave warnings alone.
+         $err_msg = "Error:\n".$1;
+      } elsif ( (not defined $ERROR_RE) && (not $err eq '') ) {
+         # Catch anything on stderr.
+         $err_msg = "Internal error:\n".$err;
+      }
+
+      if (defined $err_msg) {
+         # Internal error
+         print "DBG: Error\n" if DEBUG;
+         $self->{died} = 1; # for proper cleanup after failed eval
+         if ( $err_msg =~ /unrecognized escape in character string/ ) {
+            $err_msg .= "\nMost likely, the given R command contained lines ".
+               "exceeding 4076 bytes...";
+         }
+         $self->stdout('');
+         $self->stderr('');
+         die "Problem while running this R command:\n$cmd\n\n$err_msg\n";
       }
    
       # Save results and reinitialize
@@ -682,17 +698,37 @@ sub wrap_cmd {
    # end of stream string will appear on stdout and indicate that R has finished
    # processing the data. Note that $cmd can be multiple R commands.
    my ($self, $cmd) = @_;
-
    # Evaluate command (and catch syntax and runtime errors)
-   $cmd = _quote($cmd);
-   $cmd = qq`tryCatch( eval(parse(text=$cmd)), error = function(e){print(e)} ); `.
-          qq`write("`.EOS.qq`",stdout())\n`;
 
+   #if (defined $ERROR_RE) {
+   #   $cmd = _quote($cmd);
+   #   $cmd = qq`tryCatch( eval(parse(text=$cmd)), error = function(e){print(e)} )`;
+   #}
+
+   chomp $cmd;
+   $cmd =~ s/;$//;
+   $cmd .= qq`; write("`.EOS.qq`",stdout())\n`;
    return $cmd;
 }
 
 
 #---------- HELPER SUBS -------------------------------------------------------#
+
+
+sub _gen_error_re {
+   # Generate a locale-safe regular expression to catch R internal errors
+   my ($self) = @_;
+   # Retrieve error messages translated in this locale of R
+   my $cmd1 = q`write(ngettext( 1, "Error: ", "", domain = "R" ), stdout())`;
+   my $cmd2 = q`write(ngettext( 1, "Error in ", "", domain = "R" ), stdout())`;
+   # Generate regexp that will capture error messages of these types:
+   #    Error: object 'zzz' not found"
+   #    Error in print(ASDF) : object 'ASDF' not found
+   my $error_str1 = $self->run($cmd1);
+   my $error_str2 = $self->run($cmd2);
+   $ERROR_RE = qr/^(?:$error_str1|$error_str2)\s*(.*)$/s;
+   return 1;
+}
 
 
 sub _trim {
@@ -709,13 +745,10 @@ sub _quote {
    # Quotes {base} R documentation states that this is preferred over single-
    # quotes. Double-quotes inside the string are escaped.
    my ($str) = @_;
-
    # Escape " by \" , \" by \\\" , ...
    $str =~ s/ (\\*) " / '\\' x (2*length($1)+1) . '"' /egx;
-
    # Surround by "
    $str = qq("$str");
-
    return $str;
 }
 
@@ -723,14 +756,11 @@ sub _quote {
 sub _unquote {
    # Opposite of _quote
    my ($str) = @_;
-
    # Remove surrounding "
    $str =~ s{^"}{};
    $str =~ s{"$}{};
-
    # Interpolate (de-escape) \\\" to \" , \" to " , ...
    $str =~ s/ ((?:\\\\)*) \\ " / '\\' x (length($1)*0.5) . '"' /egx;
-
    return $str;
 }
 

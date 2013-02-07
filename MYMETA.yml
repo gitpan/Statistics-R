@@ -27,4 +27,4 @@ resources:
   bugtracker: http://rt.cpan.org/Dist/Display.html?Name=Statistics-R
   homepage: http://search.cpan.org/search?query=statistics%3A%3AR&mode=dist
   license: http://dev.perl.org/licenses/
-version: 0.29
+version: 0.30
