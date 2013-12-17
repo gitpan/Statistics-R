@@ -236,7 +236,9 @@ Florent Angly E<lt>florent.angly@gmail.comE<gt> (2011 rewrite)
 
 Graciliano M. P. E<lt>gm@virtuasites.com.brE<gt> (original code)
 
-=head1 MAINTAINER
+=head1 MAINTAINERS
+
+Florent Angly E<lt>florent.angly@gmail.comE<gt>
 
 Brian Cassidy E<lt>bricas@cpan.orgE<gt>
 
@@ -273,7 +275,7 @@ if ( $^O =~ m/^(?:.*?win32|dos)$/i ) {
     require Statistics::R::Win32;
 }
 
-our $VERSION = '0.31';
+our $VERSION = '0.32';
 
 our ($SHARED_BRIDGE, $SHARED_STDIN, $SHARED_STDOUT, $SHARED_STDERR);
 

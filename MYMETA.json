@@ -4,7 +4,7 @@
       "Florent Angly <florent.angly@gmail.com> (2011 rewrite)"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Module::Install version 1.06, CPAN::Meta::Converter version 2.120921",
+   "generated_by" : "Module::Install version 1.06, CPAN::Meta::Converter version 2.133380",
    "license" : [
       "perl_5"
    ],
@@ -50,5 +50,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.30"
+   "version" : "0.32"
 }
