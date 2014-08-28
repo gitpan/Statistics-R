@@ -7,16 +7,16 @@ Statistics::R - Perl interface with the R statistical program
 
 =head1 DESCRIPTION
 
-I<Statistics::R> is a module to controls the R interpreter (R project for statistical
-computing: L<http://www.r-project.org/>). It lets you start R, pass commands to
-it and retrieve the output. A shared mode allow to have several instances of
-I<Statistics::R> talk to the same R process.
+I<Statistics::R> is a module to controls the R interpreter (R project for
+statistical computing: L<http://www.r-project.org/>). It lets you start R, pass
+commands to it and retrieve their output. A shared mode allows several instances
+of I<Statistics::R> to talk to the same R process.
 
-The current I<Statistics::R> implementation uses pipes (for stdin, stdout and
-and stderr) to communicate with R. This implementation should be more efficient
-and reliable than that in previous version, which relied on reading and writing
-files. As before, this module works on GNU/Linux, MS Windows and probably many
-more systems.
+The current I<Statistics::R> implementation uses pipes (stdin, stdout and stderr)
+to communicate with R. This implementation is more efficient and reliable than
+that in versions < 0.20, which relied on reading and writing intermediary files.
+As before, this module works on GNU/Linux, MS Windows and probably many more
+systems. I<Statistics::R> has been tested with R version 2 and 3.
 
 =head1 SYNOPSIS
 
@@ -27,7 +27,7 @@ more systems.
   
   # Run simple R commands
   my $output_file = "file.ps";
-  $R->run(qq`postscript("$output_file" , horizontal=FALSE , width=500 , height=500 , pointsize=1)`);
+  $R->run(qq`postscript("$output_file", horizontal=FALSE, width=500, height=500)`);
   $R->run(q`plot(c(1, 5, 10), type = "l")`);
   $R->run(q`dev.off()`);
 
@@ -46,14 +46,15 @@ more systems.
 
 =item new()
 
-Build a I<Statistics::R> bridge object between Perl and R. Available options are:
-
+Build a I<Statistics::R> bridge object connecting Perl and R. Available options
+are:
 
 =over 4
 
-=item r_bin
+=item bin
 
-Specify the full path to R if it is not automatically found. See L<INSTALLATION>.
+Specify the full path to the R executable, if it is not automatically found. See
+L</INSTALLATION>.
 
 =item shared
 
@@ -71,8 +72,8 @@ Statistics::R can communicate with the same unique R instance. Example:
 
    $R1->stop; # or $R2->stop
 
-Note that in shared mode, you are responsible to have one of your Statistics::R
-instances call the I<stop()> method when you are finished with R. But be careful
+Note that in shared mode, you are responsible for calling the I<stop()> method
+from one of your Statistics::R instances when you are finished. But be careful
 not to call the I<stop()> method if you still have processes that need to
 interact with R!
 
@@ -81,18 +82,18 @@ interact with R!
 
 =item run()
 
-First, I<start()> R if it is not yet running. Then, execute R commands passed as
-a string and return the output as a string. If your command fails to run in R,
-an error message will be displayed.
+First, I<start()> R if it is not yet running. Then, execute R commands passed
+as a string and return the output as a string. If your commands failed to run
+in R, an error message will be displayed.
 
 Example:
 
    my $out = $R->run( q`print( 1 + 2 )` );
 
-If you intend on runnning many R commands, it may be convenient to pass an array
+If you intend on runnning many R commands, it may be convenient to pass a list
 of commands or put multiple commands in an here-doc:
 
-   # Array of R commands:
+   # List of R commands:
    my $out1 = $R->run(
       q`a <- 2`,
       q`b <- 5`,
@@ -109,30 +110,36 @@ of commands or put multiple commands in an here-doc:
    EOF
    my $out2 = $R->run($cmds);
 
-To run commands from a file, see the I<run_from_file()> method.
+Alternatively, to run commands from a file, use the I<run_from_file()> method.
 
-The output you get from I<run()> is the combination of what R would display on the
-standard output and the standard error, but the order may differ. When loading
-modules, some may write numerous messages on standard error. You can disable
-this behavior using the following R command:
+The return value you get from I<run()> is a combination of what R would display
+on the standard output and the standard error, but the exact order may differ.
+
+When loading modules, some may write numerous messages on standard error. You
+can disable this behavior using the following R command:
 
    suppressPackageStartupMessages(library(library_to_load))
 
-Note that R imposes an upper limit on how many characters can be contained on a
-line: about 4076 bytes maximum. You will be warned if this occurs. Commands
-containing lines exceeding the limit may fail with an error message stating:
+Note that older versions of R impose a limit on how many characters can be
+contained on a line: about 4076 bytes maximum. You will be warned if this
+occurs, with an error message stating:
 
   '\0' is an unrecognized escape in character string starting "...
 
-If possible, break down your R code into several smaller, more manageable
-statements. Alternatively, adding newline characters "\n" at strategic places in
-the R statements will work around the issue.
+In this case, try to break down your R code into several smaller, more
+manageable statements. Alternatively, adding newline characters "\n" at
+strategic places in the R statements will work around the issue.
 
 =item run_from_file()
 
-Similar to I<run()> but reads the R commands from the specified file. Internally,
-this method converts the filename to a format compatible with R and then passes
-it to the R I<source()> command to read the file and execute the commands.
+Similar to I<run()> but reads the R commands from the specified file.
+Internally, this method converts the filename to a format compatible with R and
+then passes it to the R I<source()> command to read the file and execute the
+commands.
+
+=item result()
+
+Get the results from the last R command.
 
 =item set()
 
@@ -165,16 +172,22 @@ execution of I<run()> or I<set()> will automatically call I<start()>.
 
 =item stop()
 
-Stop a running instance of R. Usually, you do not need to do this because stop()
-is automatically the Statistics::R object goes out of scope.
+Stop a running instance of R. You need to call this method after running a
+shared bridge. For a simple bridge, you do not need to do this because
+I<stop()> is automatically called when the Statistics::R object goes out of
+scope.
 
 =item restart()
 
-stop() and start() R.
+I<stop()> and I<start()> R.
 
 =item bin()
 
 Get or set the path to the R executable.
+
+=item version()
+
+Get the version number of R.
 
 =item is_shared()
 
@@ -192,17 +205,17 @@ Return the PID of the running R process
 
 =head1 INSTALLATION
 
-Since I<Statistics::R> relies on R to work, you need to install R first. See this
-page for downloads, L<http://www.r-project.org/>. If R is in your PATH environment
-variable, then it should be available from a terminal and be detected
-automatically by I<Statistics::R>. This means that you don't have to do anything
-on Linux systems to get I<Statistics::R> working. On Windows systems, in addition
-to the folders described in PATH, the usual suspects will be checked for the
-presence of the R binary, e.g. C:\Program Files\R. If I<Statistics::R> does not
-find R installation, your last recourse is to specify its full path when calling
-new():
+Since I<Statistics::R> relies on R to work, you need to install R first. See
+this page for downloads, L<http://www.r-project.org/>. If R is in your PATH
+environment variable, then it should be available from a terminal and be
+detected automatically by I<Statistics::R>. This means that you don't have to do
+anything on Linux systems to get I<Statistics::R> working. On Windows systems,
+in addition to the folders described in PATH, the usual suspects will be checked
+for the presence of the R binary, e.g. C:\Program Files\R. If I<Statistics::R>
+does not find where R is installed, your last recourse is to specify its full
+path when calling new():
 
-    my $R = Statistics::R->new( r_bin => $fullpath );
+    my $R = Statistics::R->new( bin => $fullpath );
 
 You also need to have the following CPAN Perl modules installed:
 
@@ -213,6 +226,10 @@ You also need to have the following CPAN Perl modules installed:
 =item Regexp::Common
 
 =item Text::Balanced (>= 1.97)
+
+=item Text::Wrap
+
+=item version (>= 0.77)
 
 =back
 
@@ -226,7 +243,7 @@ You also need to have the following CPAN Perl modules installed:
 
 =item * The R-project web site: L<http://www.r-project.org/>
 
-=item * Statistics:: modules for Perl: L<http://search.cpan.org/search?query=Statistics&mode=module>
+=item * Statistics::* modules for Perl: L<http://search.cpan.org/search?query=Statistics&mode=module>
 
 =back
 
@@ -265,6 +282,7 @@ revision control. To get the latest revision, run:
 use 5.006;
 use strict;
 use warnings;
+use version;
 use Regexp::Common;
 use Statistics::R::Legacy;
 use IPC::Run qw( harness start pump finish );
@@ -275,21 +293,26 @@ if ( $^O =~ m/^(?:.*?win32|dos)$/i ) {
     require Statistics::R::Win32;
 }
 
-our $VERSION = '0.32';
+our $VERSION = '0.33';
 
 our ($SHARED_BRIDGE, $SHARED_STDIN, $SHARED_STDOUT, $SHARED_STDERR);
 
-use constant DEBUG      => 0;                             # debugging messages
-use constant PROG       => 'R';                           # executable name... R
+use constant DEBUG      => 0;                     # debugging messages
+use constant PROG       => 'R';                   # executable name... R
+use constant MAXLINELEN => 1023;                  # maximum line length for R < 2.5
 
-use constant EOS        => '\\1';                         # indicate the end of R output with \1
-use constant EOS_RE     => qr/[${\(EOS)}]\n$/;            # regexp to match end of R stream
+use constant EOS        => '\\1';                 # indicate the end of R output with \1
+use constant EOS_RE     => qr/[${\(EOS)}]\n$/;    # regexp to match end of R stream
 
-use constant NUMBER_RE  => qr/^$RE{num}{real}$/;          # regexp matching numbers
-use constant BLANK_RE   => qr/^\s*$/;                     # regexp matching whitespaces
-use constant ILINE_RE   => qr/^\s*\[\d+\] /;              # regexp matching indexed line
+use constant NUMBER_RE  => qr/^$RE{num}{real}$/;  # regexp matching numbers
+use constant BLANK_RE   => qr/^\s*$/;             # regexp matching whitespaces
+use constant ILINE_RE   => qr/^\s*\[\d+\] /;      # regexp matching indexed line
 
-my $ERROR_RE;                                             # regexp matching R errors
+my $ERROR_STR_1 = 'Error: ';
+my $ERROR_STR_2 = 'Error in ';
+my $ERROR_RE;                                     # regexp matching R errors
+
+my $WRAP_LINES = sub { return shift };            # function to wrap R commands
 
 
 sub new {
@@ -297,7 +320,7 @@ sub new {
    my ($class, %args) = @_;
    my $self = {};
    bless $self, ref($class) || $class;
-   $self->initialize( %args );
+   $self->_initialize( %args );
    return $self;
 }
 
@@ -324,19 +347,31 @@ sub start {
       # method start_shared()
       if ( exists($args{shared}) && ($args{shared} == 1) ) {
          $self->is_shared( 1 );
-         $self->bridge( 1 );
+         $self->_bridge( 1 );
       }
 
       # Now, start R
-      my $bridge = $self->bridge;
+      my $bridge = $self->_bridge;
       $status = $bridge->start or die "Error starting ".PROG.": $?\n";
       $self->bin( $bridge->{KIDS}->[0]->{PATH} );
       print "DBG: Started R, ".$self->bin." (pid ".$self->pid.")\n" if DEBUG;
 
       # Generate regexp to catch R errors
       if (not defined $ERROR_RE) {
-         $self->_gen_error_re;
-         print "DBG: Regexp for internal errors is '$ERROR_RE'\n" if DEBUG;
+         $self->_generate_error_re;
+         $self->_localize_error_str;
+         $self->_generate_error_re;
+      }
+
+      # Set up a function to wrap lines for R < 2.5
+      if ( version->parse($self->version) < version->parse('2.5.0') ) {
+         print "DBG: Need to wrap to ".MAXLINELEN."\n" if DEBUG;
+         require Text::Wrap;
+         $Text::Wrap::columns   = MAXLINELEN;
+         $Text::Wrap::break     = ',';
+         $Text::Wrap::huge      = 'overflow';
+         $Text::Wrap::separator = ",\n";
+         $WRAP_LINES = sub { return Text::Wrap::wrap('', '', shift) };
       }
 
    }
@@ -350,7 +385,7 @@ sub stop {
    my ($self) = @_;
    my $status = 1;
    if ( ($self->is_started) && (not $self->{died}) ) {
-      $status = $self->bridge->finish or die "Error stopping ".PROG.": $?\n";
+      $status = $self->_bridge->finish or die "Error stopping ".PROG.": $?\n";
       print "DBG: Stopped R\n" if DEBUG;
    }
    return $status;
@@ -364,21 +399,23 @@ sub restart {
 
 
 sub is_started {
-   # Query whether or not R is currently running - hackish
+   # Query whether or not R has been started and is still running - hackish.
+   # See https://rt.cpan.org/Ticket/Display.html?id=70595
    my ($self) = @_;
-   my $bridge = $self->bridge;
+   my $bridge = $self->_bridge;
    if (not exists $bridge->{STATE}) {
       die "Internal error: could not get STATE from IPC::Run\n";
    }
-   return $bridge->{STATE} eq IPC::Run::_started ? 1 : 0;
+   return ($bridge->{STATE} eq IPC::Run::_started && $bridge->pumpable) ? 1 : 0;
 }
 
 
 sub pid {
-   # Get (or set) the PID of the running R process - hackish. It is accessible
-   # only after the bridge has start()ed
+   # Get (or set) the PID of the running R process - hackish.
+   # See https://rt.cpan.org/Ticket/Display.html?id=70595It
+   # The PID is accessible only after the bridge has start()ed.
    my ($self) = @_;
-   my $bridge = $self->bridge;
+   my $bridge = $self->_bridge;
    if ( not exists $bridge->{KIDS} ) {
       die "Internal error: could not get KIDS from IPC::Run\n";
    }
@@ -400,6 +437,13 @@ sub bin {
 }
 
 
+sub version {
+   # Get the version of R, e.g. '3.1.1'
+   my ($self) = @_;
+   return $self->run(q`write(paste(sep=".",R.Version()$major,R.Version()$minor), stdout())`);
+}
+
+
 sub run {
    # Pass the input and get the output
    my ($self, @cmds) = @_;
@@ -413,52 +457,45 @@ sub run {
 
       # Wrap command for execution in R
       print "DBG: Command is '$cmd'\n" if DEBUG;
-      $self->stdin( $self->wrap_cmd($cmd) );
-      print "DBG: Stdin is '".$self->stdin."'\n" if DEBUG;
+      $self->_stdin( $self->wrap_cmd($cmd) );
+      print "DBG: stdin is '".$self->_stdin."'\n" if DEBUG;
 
       # Pass input to R and get its output
-      my $bridge = $self->bridge;
-      while (  $self->stdout !~ EOS_RE  &&  $bridge->pumpable  ) {
+      my $bridge = $self->_bridge;
+      while (  $self->_stdout !~ EOS_RE  &&  $bridge->pumpable  ) {
          $bridge->pump;
       }
 
       # Parse output, detect errors
-      my $out = $self->stdout;
+      my $out = $self->_stdout;
       $out =~ s/${\(EOS_RE)}//;
       chomp $out;
-      my $err = $self->stderr;
+      my $err = $self->_stderr;
       chomp $err;
 
-      print "DBG: Stdout is '$out'\n" if DEBUG;
-      print "DBG: Stderr is '$err'\n" if DEBUG;
+      print "DBG: stdout is '$out'\n" if DEBUG;
+      print "DBG: stderr is '$err'\n" if DEBUG;
 
-      my $err_msg;
-      if ( (defined $ERROR_RE) && ($err =~ $ERROR_RE)) {
+      if ($err =~ $ERROR_RE) {
          # Catch errors on stderr. Leave warnings alone.
-         $err_msg = "Error:\n".$1;
-      } elsif ( (not defined $ERROR_RE) && (not $err eq '') ) {
-         # Catch anything on stderr.
-         $err_msg = "Internal error:\n".$err;
-      }
-
-      if (defined $err_msg) {
-         # Internal error
          print "DBG: Error\n" if DEBUG;
          $self->{died} = 1; # for proper cleanup after failed eval
-         if ( $err_msg =~ /unrecognized escape in character string/ ) {
+         my $err_msg = "Error:\n".$1;
+         if ( $err_msg =~ /unrecognized escape in character string/ &&
+              version->parse($self->version) < version->parse('2.5.0') ) {
             $err_msg .= "\nMost likely, the given R command contained lines ".
-               "exceeding 4076 bytes...";
+               "exceeding ".MAXLINELEN." characters.";
          }
-         $self->stdout('');
-         $self->stderr('');
+         $self->_stdout('');
+         $self->_stderr('');
          die "Problem while running this R command:\n$cmd\n\n$err_msg\n";
       }
-   
+
       # Save results and reinitialize
       $results .= "\n" if $results;
       $results .= $err.$out;
-      $self->stdout('');
-      $self->stderr('');
+      $self->_stdout('');
+      $self->_stderr('');
    }
 
    $self->result($results);
@@ -493,11 +530,24 @@ sub run_from_file {
 }
 
 
+sub result {
+   # Get / set result of last R command
+   my ($self, $val) = @_;
+   if (defined $val) {
+      $self->{result} = $val;
+   }
+   return $self->{result};
+}
+
+
 sub set {
    # Assign a variable or array of variables in R. Use undef if you want to
    # assign NULL to an R variable
    my ($self, $varname, $arr) = @_;
     
+   # Start R now if it is not already running
+   $self->start if not $self->is_started;
+
    # Check variable type, convert everything into an arrayref
    my $ref = ref $arr;
    if ($ref eq '') {
@@ -520,9 +570,10 @@ sub set {
       }
    }
 
-   # Build a variable assignment string command. Sprinkle it with "\n" to avoid
-   # running into R max line limits. Then run it!
-   $self->run( $varname.'<-c('.join(",\n",@$arr).')' );
+   # Build a variable assignment command and run it!
+   my $cmd = $varname.'<-c('.join(',',@$arr).')';
+   $cmd = &$WRAP_LINES( $cmd );
+   $self->run( $cmd );
 
    return 1;
 }
@@ -602,33 +653,28 @@ sub get {
 #---------- INTERNAL METHODS --------------------------------------------------#
 
 
-sub initialize {
+sub _initialize {
    my ($self, %args) = @_;
 
-   # Path of R binary
-   my $bin;
-   if ( $args{ r_bin } || $args{ R_bin } ) {
-      $bin = $args{ r_bin } || $args{ R_bin };
-   } else {
-      $bin = PROG; # IPC::Run will find the full path for the program later
-   }
-   $self->bin( $bin );
+   # Full path of R binary specified by bin (r_bin or R_bin for backward
+   # compatibility), or executable name (IPC::Run will find its full path later)
+   $self->bin( $args{bin} || $args{r_bin} || $args{R_bin} || PROG );
 
    # Using shared mode?
-   if ( exists($args{shared}) && ($args{shared} == 1) ) {
+   if ( exists $args{shared} && $args{shared} == 1 ) {
       $self->is_shared( 1 );
    } else {
       $self->is_shared( 0 );
    }
 
    # Build the bridge
-   $self->bridge( 1 );
+   $self->_bridge( 1 );
 
    return 1;
 }
 
 
-sub bridge {
+sub _bridge {
    # Get or build the communication bridge and IOs with R
    my ($self, $build) = @_;
    my %params = ( debug => 0 );
@@ -655,7 +701,7 @@ sub bridge {
 }
 
 
-sub stdin {
+sub _stdin {
    # Get / set standard input string for R
    my ($self, $val) = @_;
    if (defined $val) {
@@ -665,7 +711,7 @@ sub stdin {
 }
 
 
-sub stdout {
+sub _stdout {
    # Get / set standard output string for R
    my ($self, $val) = @_;
    if (defined $val) {
@@ -675,7 +721,7 @@ sub stdout {
 }
 
 
-sub stderr {
+sub _stderr {
    # Get / set standard error string for R
    my ($self, $val) = @_;
    if (defined $val) {
@@ -685,28 +731,11 @@ sub stderr {
 }
 
 
-sub result {
-   # Get / set result of last R command
-   my ($self, $val) = @_;
-   if (defined $val) {
-      $self->{result} = $val;
-   }
-   return $self->{result};
-}
-
-
 sub wrap_cmd {
    # Wrap a command to pass to R. Whether the command is successful or not, the
    # end of stream string will appear on stdout and indicate that R has finished
    # processing the data. Note that $cmd can be multiple R commands.
    my ($self, $cmd) = @_;
-   # Evaluate command (and catch syntax and runtime errors)
-
-   #if (defined $ERROR_RE) {
-   #   $cmd = _quote($cmd);
-   #   $cmd = qq`tryCatch( eval(parse(text=$cmd)), error = function(e){print(e)} )`;
-   #}
-
    chomp $cmd;
    $cmd =~ s/;$//;
    $cmd .= qq`; write("`.EOS.qq`",stdout())\n`;
@@ -714,23 +743,46 @@ sub wrap_cmd {
 }
 
 
-#---------- HELPER SUBS -------------------------------------------------------#
-
-
-sub _gen_error_re {
-   # Generate a locale-safe regular expression to catch R internal errors
-   my ($self) = @_;
-   # Retrieve error messages translated in this locale of R
-   my $cmd1 = q`write(ngettext( 1, "Error: ", "", domain = "R" ), stdout())`;
-   my $cmd2 = q`write(ngettext( 1, "Error in ", "", domain = "R" ), stdout())`;
-   # Generate regexp that will capture error messages of these types:
+sub _generate_error_re {
+   # Generate a regular expression to catch R internal errors, e.g.:
    #    Error: object 'zzz' not found"
    #    Error in print(ASDF) : object 'ASDF' not found
-   my $error_str1 = $self->run($cmd1);
-   my $error_str2 = $self->run($cmd2);
-   $ERROR_RE = qr/^(?:$error_str1|$error_str2)\s*(.*)$/s;
+   my ($self) = @_;
+   $ERROR_RE = qr/^(?:$ERROR_STR_1|$ERROR_STR_2)\s*(.*)$/s;
+   print "DBG: Regexp for catching errors is '$ERROR_RE'\n" if DEBUG;
    return 1;
 }
+
+
+sub _localize_error_str {
+   # Find the translation for the R error strings. Internationalization is
+   # present in R >=2.1, with Natural Language Support enabled.
+   my ($self) = @_;
+   my @strings;
+   for my $error_str ($ERROR_STR_1, $ERROR_STR_2) {
+      my $cmd = qq`write(ngettext(1, "$error_str", "", domain="R"), stdout())`;
+      $self->set('cmd', $cmd);
+      # Try to translate string, return '' if not possible
+      my $str = $self->run(q`tryCatch( eval(parse(text=cmd)) , error=function(e){write("",stdout())} )`);
+      $str ||= $error_str;
+      push @strings, $str;
+   }
+   ($ERROR_STR_1, $ERROR_STR_2) = @strings;
+   return 1;
+}
+
+
+sub DESTROY {
+   # The bridge to R is not automatically bombed when Statistics::R instances
+   # get out of scope. Do it now (unless running in shared mode)!
+   my ($self) = @_;
+   if (not $self->is_shared) {
+      $self->stop;
+   }
+}
+
+
+#---------- HELPER SUBS -------------------------------------------------------#
 
 
 sub _trim {
@@ -766,14 +818,5 @@ sub _unquote {
    return $str;
 }
 
-
-sub DESTROY {
-   # The bridge to R is not automatically bombed when Statistics::R instances
-   # get out of scope. Do it now (unless running in shared mode)!
-   my ($self) = @_;
-   if (not $self->is_shared) {
-      $self->stop;
-   }
-}
 
 1;
